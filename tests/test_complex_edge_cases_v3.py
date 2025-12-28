@@ -18,6 +18,7 @@ def test_transform_gold_negative_years_active() -> None:
     # Scenario: Start date is AFTER completion date (data error in source)
     silver_study = {
         "source_id": "NCT_NEG_DATE",
+        "coreason_id": "UUID-123",
         "overall_status": "COMPLETED",
         "start_date": date(2025, 1, 1),
         "completion_date": date(2020, 1, 1),
@@ -131,6 +132,7 @@ def test_transform_gold_large_enrollment() -> None:
     # Scenario: Very large enrollment number
     silver_study = {
         "source_id": "NCT_LARGE",
+        "coreason_id": "UUID-123",
         "overall_status": "COMPLETED",
         "enrollment_count": 1000000,  # 1 Million
     }
