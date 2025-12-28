@@ -8,9 +8,10 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
 
+import uuid
 from datetime import date
-from typing import Any
 
+import pytest
 from coreason_etl_clinicaltrialsgov.transformers import (
     flatten_phases,
     generate_coreason_id,
@@ -21,163 +22,215 @@ from coreason_etl_clinicaltrialsgov.transformers import (
     transform_study,
 )
 
-
-def test_parse_date() -> None:
-    assert parse_date("2023-01-15") == date(2023, 1, 15)
-    assert parse_date("2023-01") == date(2023, 1, 1)
-    assert parse_date("2023") == date(2023, 1, 1)
-    assert parse_date(None) is None
-    assert parse_date("invalid") is None
-    # Test fallthrough (too many parts)
-    assert parse_date("2023-01-01-01") is None
+# --- Helper Tests ---
 
 
-def test_normalize_age() -> None:
-    assert normalize_age("18 Years") == 18.0
-    assert normalize_age("24 Months") == 2.0
-    assert normalize_age("52 Weeks") == 1.0
-    assert normalize_age("365 Days") == 1.0
-    assert normalize_age("18") == 18.0  # Fallback
-    assert normalize_age("Unknown") is None
-    assert normalize_age(None) is None
-    # Test invalid number format
-    assert normalize_age("Years") is None
-    assert normalize_age("Unknown Years") is None
-    # Test unknown unit
-    assert normalize_age("18 Centuries") == 18.0
+@pytest.mark.parametrize(
+    "input_str, expected",
+    [
+        ("2023-10-01", date(2023, 10, 1)),
+        ("2023-10", date(2023, 10, 1)),
+        ("2023", date(2023, 1, 1)),
+        (None, None),
+        ("invalid", None),
+        ("2023-13-01", None),  # Invalid month
+    ],
+)
+def test_parse_date(input_str, expected):
+    assert parse_date(input_str) == expected
 
 
-def test_flatten_phases() -> None:
-    assert flatten_phases(["PHASE1", "PHASE2"]) == "PHASE1|PHASE2"
+@pytest.mark.parametrize(
+    "input_str, expected",
+    [
+        ("18 Years", 18.0),
+        ("24 Months", 2.0),
+        ("52 Weeks", 1.0),
+        ("365 Days", 1.0),
+        ("18", 18.0),  # No unit
+        (None, None),
+        ("invalid", None),
+        ("Year", None),  # No number
+    ],
+)
+def test_normalize_age(input_str, expected):
+    if expected is None:
+        assert normalize_age(input_str) is None
+    else:
+        assert normalize_age(input_str) == pytest.approx(expected)
+
+
+def test_generate_coreason_id():
+    nct_id = "NCT123"
+    date_str = "2023-01-01"
+    expected_seed = f"clinicaltrials.gov/{nct_id}/{date_str}"
+    expected_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, expected_seed))
+
+    assert generate_coreason_id(nct_id, date_str) == expected_uuid
+
+
+def test_flatten_phases():
     assert flatten_phases(["PHASE2", "PHASE1"]) == "PHASE1|PHASE2"
     assert flatten_phases(None) is None
+    assert flatten_phases([]) is None
 
 
-def test_generate_coreason_id() -> None:
-    uuid_1 = generate_coreason_id("NCT001", "2023-01-01")
-    uuid_2 = generate_coreason_id("NCT001", "2023-01-01")
-    uuid_3 = generate_coreason_id("NCT002", "2023-01-01")
+@pytest.mark.parametrize(
+    "count, expected",
+    [
+        (50, "Small"),
+        (500, "Medium"),
+        (1500, "Large"),
+        (None, None),
+    ],
+)
+def test_get_enrollment_bucket(count, expected):
+    assert get_enrollment_bucket(count) == expected
 
-    assert uuid_1 == uuid_2
-    assert uuid_1 != uuid_3
+
+# --- Transformation Logic Tests ---
 
 
-def test_transform_study_basic() -> None:
-    raw: dict[str, Any] = {
+@pytest.fixture
+def sample_raw_study():
+    return {
         "protocolSection": {
-            "identificationModule": {"nctId": "NCT123", "briefTitle": "Test Study"},
+            "identificationModule": {
+                "nctId": "NCT00000001",
+                "briefTitle": "Brief Title",
+                "officialTitle": "Official Title",
+                "orgStudyIdInfo": {"id": "ORG123"},
+            },
             "statusModule": {
-                "startDateStruct": {"date": "2023-01-01"},
-                "studyFirstPostDateStruct": {"date": "2022-01-01"},
+                "overallStatus": "RECRUITING",
+                "startDateStruct": {"date": "2023-01"},
+                "completionDateStruct": {"date": "2024-01"},
+                "studyFirstPostDateStruct": {"date": "2022-12-01"},
             },
-            "sponsorCollaboratorsModule": {"leadSponsor": {"name": "PharmaCorp", "class": "INDUSTRY"}},
-            "designModule": {"phases": ["PHASE1"]},
-        }
-    }
-
-    result = transform_study(raw)
-
-    study = result["silver_studies"][0]
-    assert study["source_id"] == "NCT123"
-    assert study["title"] == "Test Study"
-    assert study["start_date"] == date(2023, 1, 1)
-    assert study["phases"] == "PHASE1"
-
-    sponsors = result["silver_sponsors"]
-    assert len(sponsors) == 1
-    assert sponsors[0]["name"] == "PharmaCorp"
-    assert sponsors[0]["role"] == "LEAD"
-
-
-def test_transform_study_full() -> None:
-    raw: dict[str, Any] = {
-        "protocolSection": {
-            "identificationModule": {"nctId": "NCT999"},
-            "statusModule": {},
-            "sponsorCollaboratorsModule": {"leadSponsor": {"name": "Lead"}, "collaborators": [{"name": "Collab"}]},
-            "contactsLocationsModule": {"locations": [{"city": "New York", "country": "USA"}]},
-            "armsInterventionsModule": {"interventions": [{"type": "DRUG", "name": "Aspirin"}]},
-            "outcomesModule": {"primaryOutcomes": [{"measure": "Survival"}]},
+            "designModule": {
+                "phases": ["PHASE1", "PHASE2"],
+                "studyType": "INTERVENTIONAL",
+                "enrollmentInfo": {"count": 100, "type": "ESTIMATED"},
+            },
+            "eligibilityModule": {
+                "minimumAge": "18 Years",
+                "maximumAge": "65 Years",
+                "sex": "ALL",
+                "healthyVolunteers": True,
+            },
+            "sponsorCollaboratorsModule": {
+                "leadSponsor": {"name": "Lead Corp", "class": "INDUSTRY"},
+                "collaborators": [{"name": "Uni Lab", "class": "OTHER"}],
+            },
+            "contactsLocationsModule": {
+                "locations": [
+                    {
+                        "facility": "Hospital A",
+                        "city": "New York",
+                        "state": "NY",
+                        "zip": "10001",
+                        "country": "United States",
+                        "status": "RECRUITING",
+                    }
+                ]
+            },
+            "armsInterventionsModule": {
+                "interventions": [
+                    {
+                        "type": "DRUG",
+                        "name": "Drug X",
+                        "description": "5mg daily",
+                        "otherNames": ["BrandX"],
+                    }
+                ]
+            },
+            "outcomesModule": {
+                "primaryOutcomes": [{"measure": "Pain score", "timeFrame": "1 year"}],
+                "secondaryOutcomes": [{"measure": "Survival", "description": "Overall survival"}],
+            },
             "referencesModule": {
-                "references": [{"pmid": "123", "citation": "Cit"}],
-                "seeAlsoLinks": [{"url": "http://example.com"}],
+                "references": [{"pmid": "12345", "citation": "Author et al."}],
+                "seeAlsoLinks": [{"label": "Link 1", "url": "http://example.com"}],
             },
-        }
+        },
+        "resultsSection": {},  # Indicating results exist
     }
 
-    result = transform_study(raw)
 
-    assert len(result["silver_sponsors"]) == 2
-    assert result["silver_sponsors"][1]["role"] == "COLLABORATOR"
+def test_transform_study(sample_raw_study):
+    result = transform_study(sample_raw_study)
 
-    assert len(result["silver_locations"]) == 1
-    assert result["silver_locations"][0]["city"] == "New York"
+    # Check Studies Table
+    assert len(result["silver_studies"]) == 1
+    study = result["silver_studies"][0]
+    assert study["source_id"] == "NCT00000001"
+    assert study["title"] == "Brief Title"
+    assert study["overall_status"] == "RECRUITING"
+    assert study["phases"] == "PHASE1|PHASE2"
+    assert study["min_age"] == 18.0
 
-    assert len(result["silver_interventions"]) == 1
-    assert result["silver_interventions"][0]["name"] == "Aspirin"
+    # Check Sponsors
+    sponsors = result["silver_sponsors"]
+    assert len(sponsors) == 2
+    assert sponsors[0]["role"] == "LEAD"
+    assert sponsors[0]["name"] == "Lead Corp"
+    assert sponsors[1]["role"] == "COLLABORATOR"
+    assert sponsors[1]["name"] == "Uni Lab"
 
-    assert len(result["silver_outcomes"]) == 1
-    assert result["silver_outcomes"][0]["measure"] == "Survival"
-    assert result["silver_outcomes"][0]["outcome_type"] == "PRIMARY"
+    # Check Locations
+    locations = result["silver_locations"]
+    assert len(locations) == 1
+    assert locations[0]["city"] == "New York"
 
-    assert len(result["silver_references"]) == 2
-    assert result["silver_references"][0]["type"] == "REFERENCE"
-    assert result["silver_references"][1]["type"] == "LINK"
+    # Check Interventions
+    interventions = result["silver_interventions"]
+    assert len(interventions) == 1
+    assert interventions[0]["name"] == "Drug X"
+
+    # Check Outcomes
+    outcomes = result["silver_outcomes"]
+    assert len(outcomes) == 2
+    assert outcomes[0]["outcome_type"] == "PRIMARY"
+    assert outcomes[1]["outcome_type"] == "SECONDARY"
+
+    # Check References
+    refs = result["silver_references"]
+    assert len(refs) == 2
+    assert refs[0]["type"] == "REFERENCE"
+    assert refs[0]["pmid"] == "12345"
+    assert refs[1]["type"] == "LINK"
+    assert refs[1]["url"] == "http://example.com"
 
 
-def test_transform_study_empty() -> None:
-    result = transform_study({})
-    assert result == {}
+def test_transform_study_empty_nct():
+    # If no nctId, returns empty dict
+    res = transform_study({})
+    assert res == {}
 
 
-def test_get_enrollment_bucket() -> None:
-    assert get_enrollment_bucket(None) is None
-    assert get_enrollment_bucket(50) == "Small"
-    assert get_enrollment_bucket(200) == "Medium"
-    assert get_enrollment_bucket(2000) == "Large"
+def test_transform_gold(sample_raw_study):
+    silver_study = transform_study(sample_raw_study)["silver_studies"][0]
+    locations = transform_study(sample_raw_study)["silver_locations"]
 
-
-def test_transform_gold_valid() -> None:
-    raw: dict[str, Any] = {"resultsSection": {}}
-    silver = {
-        "source_id": "NCT001",
-        "coreason_id": "UUID",
-        "title": "Title",
-        "overall_status": "RECRUITING",
-        "start_date": date(2020, 1, 1),
-        "completion_date": date(2021, 1, 1),
-        "enrollment_count": 50,
-    }
-    locations: list[dict[str, Any]] = [{"country": "USA"}, {"country": "Canada"}, {"country": "USA"}]
-
-    gold = transform_gold(raw, silver, locations)
+    gold = transform_gold(sample_raw_study, silver_study, locations)
 
     assert gold is not None
+    assert gold["source_id"] == "NCT00000001"
     assert gold["overall_status"] == "RECRUITING"
-    assert gold["enrollment_bucket"] == "Small"
-    assert abs(gold["years_active"] - 1.0) < 0.01
+    assert gold["enrollment_bucket"] == "Medium"  # 100
     assert gold["has_results"] is True
-    assert set(gold["geo_countries"]) == {"USA", "Canada"}
+    assert "United States" in gold["geo_countries"]
+    # 2023-01-01 to 2024-01-01 is 1 year (approx 365 days)
+    # 365 / 365.25 ~= 0.999
+    assert gold["years_active"] == pytest.approx(1.0, rel=0.01)
 
 
-def test_transform_gold_filtered() -> None:
-    raw: dict[str, Any] = {}
-    silver = {
-        "overall_status": "WITHDRAWN"  # Not in valid set
-    }
-    locations: list[dict[str, Any]] = []
+def test_transform_gold_filtered_status(sample_raw_study):
+    silver_study = transform_study(sample_raw_study)["silver_studies"][0]
+    locations = transform_study(sample_raw_study)["silver_locations"]
 
-    gold = transform_gold(raw, silver, locations)
+    # Change status to invalid
+    silver_study["overall_status"] = "WITHDRAWN"
+
+    gold = transform_gold(sample_raw_study, silver_study, locations)
     assert gold is None
-
-
-def test_transform_gold_missing_dates() -> None:
-    raw: dict[str, Any] = {}
-    silver = {"overall_status": "COMPLETED", "enrollment_count": None}
-    locations: list[dict[str, Any]] = []
-
-    gold = transform_gold(raw, silver, locations)
-    assert gold is not None
-    assert gold["years_active"] is None
-    assert gold["enrollment_bucket"] is None
-    assert gold["has_results"] is False

@@ -8,115 +8,119 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
 
-from typing import Any, Generator
 from unittest.mock import patch
 
 import pytest
-
 from coreason_etl_clinicaltrialsgov.extractors import clinicaltrials_source
 
 
 @pytest.fixture
-def mock_client_class() -> Generator[Any, None, None]:
+def mock_client_class():
     with patch("coreason_etl_clinicaltrialsgov.extractors.ClinicalTrialsClient") as mock:
         yield mock
 
 
-def test_clinicaltrials_source_yields_tables(mock_client_class: Any) -> None:
-    # Setup mock data
-    mock_instance = mock_client_class.return_value
+@pytest.fixture
+def mock_transform_study():
+    with patch("coreason_etl_clinicaltrialsgov.extractors.transform_study") as mock:
+        yield mock
 
-    raw_study = {
-        "protocolSection": {
-            "identificationModule": {"nctId": "NCT123", "briefTitle": "Test"},
-            "statusModule": {"overallStatus": "RECRUITING"},
-            "designModule": {"phases": ["PHASE1"]},
-            "sponsorCollaboratorsModule": {"leadSponsor": {"name": "Sponsor1"}},
-            "contactsLocationsModule": {"locations": [{"country": "USA"}]},
-        },
-        "resultsSection": {},
-    }
 
-    mock_instance.list_studies.return_value = iter([raw_study])
+@pytest.fixture
+def mock_transform_gold():
+    with patch("coreason_etl_clinicaltrialsgov.extractors.transform_gold") as mock:
+        yield mock
 
+
+def test_clinicaltrials_source_structure():
     source = clinicaltrials_source()
-    # Correct way to access resource from source
-    resource = source.resources["studies_stream"]
+    # It returns a DltSource object
+    assert source.name == "clinicaltrials"
+    # Check resources
+    assert "studies_stream" in source.resources
 
-    # Iterate the resource to get items
-    items = list(resource)
 
-    # We expect Bronze, Silver (studies, sponsors, locations), Gold
-    # Count: 5 items
+def test_studies_generator_flow(mock_client_class, mock_transform_study, mock_transform_gold):
+    # Setup mocks
+    client_instance = mock_client_class.return_value
 
-    assert len(items) >= 4
+    # Mock data
+    raw_study = {"protocolSection": {"identificationModule": {"nctId": "NCT001"}}}
+    client_instance.list_studies.return_value = iter([raw_study])
 
-    # Categorize by keys since we can't easily rely on _dlt_meta in mocked unit test context
-    # unless we verify dlt.mark behavior.
-
-    items_by_type: dict[str, list[Any]] = {
-        "bronze": [],
-        "silver_study": [],
-        "silver_sponsor": [],
-        "silver_location": [],
-        "gold": [],
+    # Mock transforms
+    mock_transform_study.return_value = {
+        "silver_studies": [{"source_id": "NCT001", "overall_status": "RECRUITING"}],
+        "silver_locations": [{"city": "Boston"}],
     }
+    mock_transform_gold.return_value = {"gold_field": "val"}
 
-    for item in items:
-        if "raw_payload" in item:
-            items_by_type["bronze"].append(item)
-        elif "title" in item and "enrollment_bucket" not in item:
-            items_by_type["silver_study"].append(item)
-        elif "role" in item:
-            items_by_type["silver_sponsor"].append(item)
-        elif "city" in item:  # Location keys
-            items_by_type["silver_location"].append(item)
-        elif "enrollment_bucket" in item:
-            items_by_type["gold"].append(item)
-
-    assert len(items_by_type["bronze"]) == 1
-    assert items_by_type["bronze"][0]["source_id"] == "NCT123"
-
-    assert len(items_by_type["silver_study"]) == 1
-    assert items_by_type["silver_study"][0]["title"] == "Test"
-
-    assert len(items_by_type["silver_sponsor"]) == 1
-    assert items_by_type["silver_sponsor"][0]["name"] == "Sponsor1"
-
-    assert len(items_by_type["gold"]) == 1
-    assert items_by_type["gold"][0]["overall_status"] == "RECRUITING"
-
-
-def test_clinicaltrials_source_skips_invalid(mock_client_class: Any) -> None:
-    mock_instance = mock_client_class.return_value
-    # No NCT ID
-    mock_instance.list_studies.return_value = iter([{}])
-
+    # Run generator directly
     source = clinicaltrials_source()
     resource = source.resources["studies_stream"]
+
+    # We can iterate the resource
     items = list(resource)
+
+    # Expected items:
+    # 1. Bronze record (dict with table name mark)
+    # 2. Silver study
+    # 3. Silver locations
+    # 4. Gold record
+
+    # dlt resources yield TDataItems which can be dicts or lists of dicts
+    # Verify we got items
+    assert len(items) >= 3
+
+    # Check Bronze
+    # Note: accessing yielded items from dlt resource directly might require handling DltResource specifics,
+    # but for a generator resource, iterating it yields the data items.
+
+    bronze = next(i for i in items if isinstance(i, dict) and i.get("raw_payload") == raw_study)
+    assert bronze["source_id"] == "NCT001"
+
+    # Check Silver
+    silver_study = next(i for i in items if isinstance(i, dict) and i.get("overall_status") == "RECRUITING")
+    assert silver_study["source_id"] == "NCT001"
+
+    silver_loc = next(i for i in items if isinstance(i, dict) and i.get("city") == "Boston")
+    assert silver_loc is not None
+
+    # Check Gold
+    gold = next(i for i in items if isinstance(i, dict) and i.get("gold_field") == "val")
+    assert gold is not None
+
+
+def test_studies_generator_skip_no_nct(mock_client_class):
+    client_instance = mock_client_class.return_value
+    # Study with no nctId
+    client_instance.list_studies.return_value = iter([{"protocolSection": {}}])
+
+    source = clinicaltrials_source()
+    resource = source.resources["studies_stream"]
+    items = list(resource)
+
     assert len(items) == 0
 
 
-def test_clinicaltrials_source_filters_gold(mock_client_class: Any) -> None:
-    mock_instance = mock_client_class.return_value
+def test_studies_generator_gold_skip(mock_client_class, mock_transform_study, mock_transform_gold):
+    client_instance = mock_client_class.return_value
+    raw_study = {"protocolSection": {"identificationModule": {"nctId": "NCT001"}}}
+    client_instance.list_studies.return_value = iter([raw_study])
 
-    raw_study = {
-        "protocolSection": {
-            "identificationModule": {"nctId": "NCT123"},
-            "statusModule": {"overallStatus": "WITHDRAWN"},  # Invalid for Gold
-        }
-    }
-
-    mock_instance.list_studies.return_value = iter([raw_study])
+    mock_transform_study.return_value = {"silver_studies": [{"source_id": "NCT001"}], "silver_locations": []}
+    # Gold returns None (filtered out)
+    mock_transform_gold.return_value = None
 
     source = clinicaltrials_source()
     resource = source.resources["studies_stream"]
     items = list(resource)
 
-    has_gold = False
-    for item in items:
-        if "enrollment_bucket" in item:
-            has_gold = True
+    # Should contain Bronze + Silver, but no Gold
+    assert any(i.get("source_id") == "NCT001" for i in items)
+    # No item with table name 'gold_studies' logic check is hard without checking dlt marks,
+    # but we can check the return values.
+    # Since we mocked transform_gold to return None, the generator logic `if gold_record: yield` won't yield it.
 
-    assert not has_gold
+    # Verify mock call
+    mock_transform_gold.assert_called_once()

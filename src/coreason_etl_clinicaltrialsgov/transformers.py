@@ -12,6 +12,15 @@ import uuid
 from datetime import date
 from typing import Any, Optional
 
+from coreason_etl_clinicaltrialsgov.schemas import (
+    SilverIntervention,
+    SilverLocation,
+    SilverOutcome,
+    SilverReference,
+    SilverSponsor,
+    SilverStudy,
+)
+
 # --- Helpers ---
 
 
@@ -113,140 +122,140 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
     c_id = generate_coreason_id(nct_id, first_received)
 
     # 1. Silver Studies
-    silver_study = {
-        "source_id": nct_id,
-        "coreason_id": c_id,
-        "title": ident.get("briefTitle"),
-        "official_title": ident.get("officialTitle"),
-        "org_study_id": ident.get("orgStudyIdInfo", {}).get("id"),
-        "overall_status": status.get("overallStatus"),
-        "start_date": parse_date(status.get("startDateStruct", {}).get("date")),
-        "completion_date": parse_date(status.get("completionDateStruct", {}).get("date")),
-        "phases": flatten_phases(design.get("phases")),
-        "study_type": design.get("studyType"),
-        "enrollment_count": design.get("enrollmentInfo", {}).get("count"),
-        "enrollment_type": design.get("enrollmentInfo", {}).get("type"),
-        "min_age": normalize_age(eligibility.get("minimumAge")),
-        "max_age": normalize_age(eligibility.get("maximumAge")),
-        "sex": eligibility.get("sex"),
-        "accepted_healthy_volunteers": eligibility.get("healthyVolunteers"),
-    }
+    silver_study_model = SilverStudy(
+        source_id=nct_id,
+        coreason_id=c_id,
+        title=ident.get("briefTitle"),
+        official_title=ident.get("officialTitle"),
+        org_study_id=ident.get("orgStudyIdInfo", {}).get("id"),
+        overall_status=status.get("overallStatus"),
+        start_date=parse_date(status.get("startDateStruct", {}).get("date")),
+        completion_date=parse_date(status.get("completionDateStruct", {}).get("date")),
+        phases=flatten_phases(design.get("phases")),
+        study_type=design.get("studyType"),
+        enrollment_count=design.get("enrollmentInfo", {}).get("count"),
+        enrollment_type=design.get("enrollmentInfo", {}).get("type"),
+        min_age=normalize_age(eligibility.get("minimumAge")),
+        max_age=normalize_age(eligibility.get("maximumAge")),
+        sex=eligibility.get("sex"),
+        accepted_healthy_volunteers=eligibility.get("healthyVolunteers"),
+    )
 
     # 2. Silver Sponsors
-    silver_sponsors = []
+    silver_sponsors_list = []
     sponsors_module = protocol.get("sponsorCollaboratorsModule", {})
     lead = sponsors_module.get("leadSponsor")
     if lead:
-        silver_sponsors.append(
-            {
-                "source_id": nct_id,
-                "coreason_id": c_id,
-                "name": lead.get("name"),
-                "agency_class": lead.get("class"),
-                "role": "LEAD",
-            }
+        silver_sponsors_list.append(
+            SilverSponsor(
+                source_id=nct_id,
+                coreason_id=c_id,
+                name=lead.get("name"),
+                agency_class=lead.get("class"),
+                role="LEAD",
+            )
         )
 
     collaborators = sponsors_module.get("collaborators", [])
     for collab in collaborators:
-        silver_sponsors.append(
-            {
-                "source_id": nct_id,
-                "coreason_id": c_id,
-                "name": collab.get("name"),
-                "agency_class": collab.get("class"),
-                "role": "COLLABORATOR",
-            }
+        silver_sponsors_list.append(
+            SilverSponsor(
+                source_id=nct_id,
+                coreason_id=c_id,
+                name=collab.get("name"),
+                agency_class=collab.get("class"),
+                role="COLLABORATOR",
+            )
         )
 
     # 3. Silver Locations
-    silver_locations = []
+    silver_locations_list = []
     locations_module = protocol.get("contactsLocationsModule", {})
     locations = locations_module.get("locations", [])
     for loc in locations:
-        silver_locations.append(
-            {
-                "source_id": nct_id,
-                "coreason_id": c_id,
-                "facility": loc.get("facility"),
-                "city": loc.get("city"),
-                "state": loc.get("state"),
-                "zip": loc.get("zip"),
-                "country": loc.get("country"),
-                "status": loc.get("status"),  # Location status
-                "geo_point": loc.get("geoPoint"),  # If available
-            }
+        silver_locations_list.append(
+            SilverLocation(
+                source_id=nct_id,
+                coreason_id=c_id,
+                facility=loc.get("facility"),
+                city=loc.get("city"),
+                state=loc.get("state"),
+                zip=loc.get("zip"),
+                country=loc.get("country"),
+                status=loc.get("status"),
+                geo_point=loc.get("geoPoint"),
+            )
         )
 
     # 4. Silver Interventions
-    silver_interventions = []
+    silver_interventions_list = []
     arms_module = protocol.get("armsInterventionsModule", {})
     interventions = arms_module.get("interventions", [])
     for interv in interventions:
-        silver_interventions.append(
-            {
-                "source_id": nct_id,
-                "coreason_id": c_id,
-                "type": interv.get("type"),
-                "name": interv.get("name"),
-                "description": interv.get("description"),
-                "other_names": interv.get("otherNames", []),
-            }
+        silver_interventions_list.append(
+            SilverIntervention(
+                source_id=nct_id,
+                coreason_id=c_id,
+                type=interv.get("type"),
+                name=interv.get("name"),
+                description=interv.get("description"),
+                other_names=interv.get("otherNames", []),
+            )
         )
 
     # 5. Silver Outcomes
-    silver_outcomes = []
+    silver_outcomes_list = []
     outcomes_module = protocol.get("outcomesModule", {})
     for outcome_type in ["primaryOutcomes", "secondaryOutcomes", "otherOutcomes"]:
         outcomes = outcomes_module.get(outcome_type, [])
         for out in outcomes:
-            silver_outcomes.append(
-                {
-                    "source_id": nct_id,
-                    "coreason_id": c_id,
-                    "outcome_type": outcome_type.replace("Outcomes", "").upper(),  # PRIMARY, SECONDARY, OTHER
-                    "measure": out.get("measure"),
-                    "description": out.get("description"),
-                    "time_frame": out.get("timeFrame"),
-                }
+            silver_outcomes_list.append(
+                SilverOutcome(
+                    source_id=nct_id,
+                    coreason_id=c_id,
+                    outcome_type=outcome_type.replace("Outcomes", "").upper(),
+                    measure=out.get("measure"),
+                    description=out.get("description"),
+                    time_frame=out.get("timeFrame"),
+                )
             )
 
     # 6. Silver References
-    silver_references = []
+    silver_references_list = []
     refs_module = protocol.get("referencesModule", {})
 
     refs = refs_module.get("references", [])
     for ref in refs:
-        silver_references.append(
-            {
-                "source_id": nct_id,
-                "coreason_id": c_id,
-                "type": "REFERENCE",
-                "pmid": ref.get("pmid"),
-                "citation": ref.get("citation"),
-                "retraction": ref.get("retraction"),
-            }
+        silver_references_list.append(
+            SilverReference(
+                source_id=nct_id,
+                coreason_id=c_id,
+                type="REFERENCE",
+                pmid=ref.get("pmid"),
+                citation=ref.get("citation"),
+                retraction=ref.get("retraction"),
+            )
         )
 
     links = refs_module.get("seeAlsoLinks", [])
     for link in links:
-        silver_references.append(
-            {
-                "source_id": nct_id,
-                "coreason_id": c_id,
-                "type": "LINK",
-                "label": link.get("label"),
-                "url": link.get("url"),
-            }
+        silver_references_list.append(
+            SilverReference(
+                source_id=nct_id,
+                coreason_id=c_id,
+                type="LINK",
+                label=link.get("label"),
+                url=link.get("url"),
+            )
         )
 
     return {
-        "silver_studies": [silver_study],
-        "silver_sponsors": silver_sponsors,
-        "silver_locations": silver_locations,
-        "silver_interventions": silver_interventions,
-        "silver_outcomes": silver_outcomes,
-        "silver_references": silver_references,
+        "silver_studies": [silver_study_model.model_dump()],
+        "silver_sponsors": [s.model_dump() for s in silver_sponsors_list],
+        "silver_locations": [loc.model_dump() for loc in silver_locations_list],
+        "silver_interventions": [i.model_dump() for i in silver_interventions_list],
+        "silver_outcomes": [o.model_dump() for o in silver_outcomes_list],
+        "silver_references": [r.model_dump() for r in silver_references_list],
     }
 
 
@@ -268,6 +277,17 @@ def transform_gold(
     years_active = None
     if start and end:
         # Calculate years as float
+        # Ensure we have date objects if pydantic didn't give us (it should have)
+        # If silver_study is a dict from model_dump(), start and end are date objects or strings?
+        # Pydantic model_dump() usually keeps types by default unless mode='json'.
+        # But if it came from dlt extract/transform, it might be serialised?
+        # In this pipeline, `transform_study` returns model_dump() (dict of python objects).
+        # So start/end should be date objects or None.
+        if isinstance(start, str):
+            start = date.fromisoformat(start)
+        if isinstance(end, str):
+            end = date.fromisoformat(end)
+
         delta = end - start
         years_active = delta.days / 365.25
 
