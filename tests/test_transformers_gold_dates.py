@@ -9,12 +9,14 @@
 # Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
 
 from datetime import date
+from typing import Any
 
 import pytest
+
 from coreason_etl_clinicaltrialsgov.transformers import transform_gold
 
 
-def test_transform_gold_string_date_handling():
+def test_transform_gold_string_date_handling() -> None:
     # Simulate a scenario where silver_study has strings instead of dates (e.g. after round trip serialization)
     silver_study = {
         "source_id": "1",
@@ -25,15 +27,15 @@ def test_transform_gold_string_date_handling():
         "completion_date": "2024-01-01",
         "enrollment_count": 50,
     }
-    locations = []
+    locations: list[dict[str, Any]] = []
 
     # This should trigger the isinstance(..., str) check in transform_gold
     gold = transform_gold({"resultsSection": {}}, silver_study, locations)
-
+    assert gold is not None
     assert gold["years_active"] == pytest.approx(1.0, rel=0.01)
 
 
-def test_transform_gold_date_object_handling():
+def test_transform_gold_date_object_handling() -> None:
     # Simulate correct behavior where objects are preserved
     silver_study = {
         "source_id": "1",
@@ -44,7 +46,8 @@ def test_transform_gold_date_object_handling():
         "completion_date": date(2024, 1, 1),
         "enrollment_count": 50,
     }
-    locations = []
+    locations: list[dict[str, Any]] = []
 
     gold = transform_gold({"resultsSection": {}}, silver_study, locations)
+    assert gold is not None
     assert gold["years_active"] == pytest.approx(1.0, rel=0.01)

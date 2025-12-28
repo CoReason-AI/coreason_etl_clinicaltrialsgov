@@ -11,7 +11,7 @@
 from coreason_etl_clinicaltrialsgov.transformers import parse_date
 
 
-def test_parse_date_coverage():
+def test_parse_date_coverage() -> None:
     # Hit line 41: except ValueError: return None (outer try)
     # The outer try block wraps `parts = date_str.split("-")` and the if/elif logic.
     # To hit ValueError here, one of the `date.fromisoformat` calls must fail.

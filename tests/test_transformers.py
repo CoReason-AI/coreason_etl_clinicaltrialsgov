@@ -10,8 +10,10 @@
 
 import uuid
 from datetime import date
+from typing import Any
 
 import pytest
+
 from coreason_etl_clinicaltrialsgov.transformers import (
     flatten_phases,
     generate_coreason_id,
@@ -36,7 +38,7 @@ from coreason_etl_clinicaltrialsgov.transformers import (
         ("2023-13-01", None),  # Invalid month
     ],
 )
-def test_parse_date(input_str, expected):
+def test_parse_date(input_str: str | None, expected: date | None) -> None:
     assert parse_date(input_str) == expected
 
 
@@ -53,14 +55,14 @@ def test_parse_date(input_str, expected):
         ("Year", None),  # No number
     ],
 )
-def test_normalize_age(input_str, expected):
+def test_normalize_age(input_str: str | None, expected: float | None) -> None:
     if expected is None:
         assert normalize_age(input_str) is None
     else:
         assert normalize_age(input_str) == pytest.approx(expected)
 
 
-def test_generate_coreason_id():
+def test_generate_coreason_id() -> None:
     nct_id = "NCT123"
     date_str = "2023-01-01"
     expected_seed = f"clinicaltrials.gov/{nct_id}/{date_str}"
@@ -69,7 +71,7 @@ def test_generate_coreason_id():
     assert generate_coreason_id(nct_id, date_str) == expected_uuid
 
 
-def test_flatten_phases():
+def test_flatten_phases() -> None:
     assert flatten_phases(["PHASE2", "PHASE1"]) == "PHASE1|PHASE2"
     assert flatten_phases(None) is None
     assert flatten_phases([]) is None
@@ -84,7 +86,7 @@ def test_flatten_phases():
         (None, None),
     ],
 )
-def test_get_enrollment_bucket(count, expected):
+def test_get_enrollment_bucket(count: int | None, expected: str | None) -> None:
     assert get_enrollment_bucket(count) == expected
 
 
@@ -92,7 +94,7 @@ def test_get_enrollment_bucket(count, expected):
 
 
 @pytest.fixture
-def sample_raw_study():
+def sample_raw_study() -> dict[str, Any]:
     return {
         "protocolSection": {
             "identificationModule": {
@@ -157,7 +159,7 @@ def sample_raw_study():
     }
 
 
-def test_transform_study(sample_raw_study):
+def test_transform_study(sample_raw_study: dict[str, Any]) -> None:
     result = transform_study(sample_raw_study)
 
     # Check Studies Table
@@ -202,13 +204,13 @@ def test_transform_study(sample_raw_study):
     assert refs[1]["url"] == "http://example.com"
 
 
-def test_transform_study_empty_nct():
+def test_transform_study_empty_nct() -> None:
     # If no nctId, returns empty dict
     res = transform_study({})
     assert res == {}
 
 
-def test_transform_gold(sample_raw_study):
+def test_transform_gold(sample_raw_study: dict[str, Any]) -> None:
     silver_study = transform_study(sample_raw_study)["silver_studies"][0]
     locations = transform_study(sample_raw_study)["silver_locations"]
 
@@ -225,7 +227,7 @@ def test_transform_gold(sample_raw_study):
     assert gold["years_active"] == pytest.approx(1.0, rel=0.01)
 
 
-def test_transform_gold_filtered_status(sample_raw_study):
+def test_transform_gold_filtered_status(sample_raw_study: dict[str, Any]) -> None:
     silver_study = transform_study(sample_raw_study)["silver_studies"][0]
     locations = transform_study(sample_raw_study)["silver_locations"]
 

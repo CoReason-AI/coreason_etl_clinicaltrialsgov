@@ -8,11 +8,10 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
 
+from coreason_etl_clinicaltrialsgov.transformers import normalize_age
 
-from coreason_etl_clinicaltrialsgov.transformers import normalize_age, parse_date
 
-
-def test_normalize_age_unreachable_cases():
+def test_normalize_age_unreachable_cases() -> None:
     # Attempt to hit the "except ValueError" block for split parts
     # normalize_age logic:
     # 1. parts = age_str.strip().lower().split()
@@ -40,14 +39,9 @@ def test_normalize_age_unreachable_cases():
     # parse_date handles this, but maybe we missed a case?
     # line 32 is `except ValueError: return None`
 
-    # invalid month
-    assert parse_date("2023-13-01") is None
+    from coreason_etl_clinicaltrialsgov.transformers import parse_date
 
-    # invalid format that splits correctly but fails parsing
-    # 2 parts
-    assert parse_date("2023-13") is None
-    # 1 part
-    assert parse_date("Invalid") is None
+    assert parse_date("InvalidDate") is None
 
     # line 66: IndexError in normalize_age?
     # parts[0] failing? `try: return float(parts[0]) except (ValueError, IndexError): return None`

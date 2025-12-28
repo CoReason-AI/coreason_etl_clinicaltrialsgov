@@ -12,7 +12,7 @@
 from coreason_etl_clinicaltrialsgov.transformers import normalize_age, transform_gold
 
 
-def test_normalize_age_edge_cases():
+def test_normalize_age_edge_cases() -> None:
     # Test "X Year" singular
     assert normalize_age("1 Year") == 1.0
     # Test just number string
@@ -27,14 +27,15 @@ def test_normalize_age_edge_cases():
     assert normalize_age("Years") is None
 
 
-def test_transform_gold_no_status():
+def test_transform_gold_no_status() -> None:
     # If overall_status is missing
     silver_study = {"source_id": "1", "overall_status": None}
     assert transform_gold({}, silver_study, []) is None
 
 
-def test_transform_gold_partial_dates():
+def test_transform_gold_partial_dates() -> None:
     # If start or end date is missing, years_active is None
     silver_study = {"source_id": "1", "overall_status": "RECRUITING", "start_date": None, "completion_date": None}
     gold = transform_gold({"resultsSection": {}}, silver_study, [])
+    assert gold is not None
     assert gold["years_active"] is None

@@ -8,28 +8,30 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
 
-from unittest.mock import patch
+from typing import Generator
+from unittest.mock import MagicMock, patch
 
 import pytest
+
 from coreason_etl_clinicaltrialsgov.extractors import clinicaltrials_source
 
 
 @pytest.fixture
-def mock_client_class():
+def mock_client_class() -> Generator[MagicMock, None, None]:
     with patch("coreason_etl_clinicaltrialsgov.extractors.ClinicalTrialsClient") as mock:
         yield mock
 
 
 @pytest.fixture
-def mock_dlt_state():
+def mock_dlt_state() -> Generator[dict[str, str], None, None]:
     # Mock dlt.current.source_state()
     # It returns a dict-like object that persists changes
-    state = {}
+    state: dict[str, str] = {}
     with patch("dlt.current.source_state", return_value=state):
         yield state
 
 
-def test_incremental_load_logic(mock_client_class, mock_dlt_state):
+def test_incremental_load_logic(mock_client_class: MagicMock, mock_dlt_state: dict[str, str]) -> None:
     # Setup initial state
     mock_dlt_state["last_updated_date"] = "2023-01-01"
 
@@ -61,7 +63,7 @@ def test_incremental_load_logic(mock_client_class, mock_dlt_state):
     assert mock_dlt_state["last_updated_date"] == "2023-02-01"
 
 
-def test_initial_load_logic(mock_client_class, mock_dlt_state):
+def test_initial_load_logic(mock_client_class: MagicMock, mock_dlt_state: dict[str, str]) -> None:
     # Empty state
     mock_dlt_state.clear()
 
@@ -89,7 +91,7 @@ def test_initial_load_logic(mock_client_class, mock_dlt_state):
     assert mock_dlt_state["last_updated_date"] == "2023-02-01"
 
 
-def test_custom_query_override(mock_client_class, mock_dlt_state):
+def test_custom_query_override(mock_client_class: MagicMock, mock_dlt_state: dict[str, str]) -> None:
     mock_dlt_state["last_updated_date"] = "2023-01-01"
 
     client_instance = mock_client_class.return_value
@@ -105,7 +107,7 @@ def test_custom_query_override(mock_client_class, mock_dlt_state):
     assert call_kwargs["query_term"] == custom_term
 
 
-def test_state_updates_max_seen(mock_client_class, mock_dlt_state):
+def test_state_updates_max_seen(mock_client_class: MagicMock, mock_dlt_state: dict[str, str]) -> None:
     mock_dlt_state["last_updated_date"] = "2023-01-01"
 
     client_instance = mock_client_class.return_value
@@ -139,6 +141,7 @@ def test_state_updates_max_seen(mock_client_class, mock_dlt_state):
     client_instance.list_studies.return_value = iter(studies)
 
     source = clinicaltrials_source()
-    list(source.resources["studies_stream"])
+    resource = source.resources["studies_stream"]
+    list(resource)
 
     assert mock_dlt_state["last_updated_date"] == "2023-01-10"
