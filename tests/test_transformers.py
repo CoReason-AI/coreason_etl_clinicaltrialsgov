@@ -26,7 +26,7 @@ from coreason_etl_clinicaltrialsgov.transformers import (
 # --- Helper Tests ---
 
 
-@pytest.mark.parametrize(  # type: ignore[misc]
+@pytest.mark.parametrize(
     "input_str, expected",
     [
         ("2023-10-01", date(2023, 10, 1)),
@@ -41,7 +41,7 @@ def test_parse_date(input_str: str | None, expected: date | None) -> None:
     assert parse_date(input_str) == expected
 
 
-@pytest.mark.parametrize(  # type: ignore[misc]
+@pytest.mark.parametrize(
     "input_str, expected",
     [
         ("18 Years", 18.0),
@@ -76,7 +76,7 @@ def test_flatten_phases() -> None:
     assert flatten_phases([]) is None
 
 
-@pytest.mark.parametrize(  # type: ignore[misc]
+@pytest.mark.parametrize(
     "count, expected",
     [
         (50, "Small"),
@@ -92,7 +92,7 @@ def test_get_enrollment_bucket(count: int | None, expected: str | None) -> None:
 # --- Transformation Logic Tests ---
 
 
-@pytest.fixture  # type: ignore[misc]
+@pytest.fixture
 def sample_raw_study() -> dict[str, Any]:
     return {
         "protocolSection": {

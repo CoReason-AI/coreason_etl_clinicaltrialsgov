@@ -15,19 +15,19 @@ import pytest
 from coreason_etl_clinicaltrialsgov.extractors import clinicaltrials_source
 
 
-@pytest.fixture  # type: ignore[misc]
+@pytest.fixture
 def mock_client_class() -> Generator[MagicMock, None, None]:
     with patch("coreason_etl_clinicaltrialsgov.extractors.ClinicalTrialsClient") as mock:
         yield mock
 
 
-@pytest.fixture  # type: ignore[misc]
+@pytest.fixture
 def mock_transform_study() -> Generator[MagicMock, None, None]:
     with patch("coreason_etl_clinicaltrialsgov.extractors.transform_study") as mock:
         yield mock
 
 
-@pytest.fixture  # type: ignore[misc]
+@pytest.fixture
 def mock_transform_gold() -> Generator[MagicMock, None, None]:
     with patch("coreason_etl_clinicaltrialsgov.extractors.transform_gold") as mock:
         yield mock

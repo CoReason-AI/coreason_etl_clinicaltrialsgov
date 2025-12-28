@@ -142,7 +142,7 @@ def test_transform_gold_case_insensitive_status() -> None:
 # --- Extractor Complex Tests ---
 
 
-@pytest.fixture  # type: ignore[misc]
+@pytest.fixture
 def mock_client_class() -> Generator[Any, None, None]:
     with patch("coreason_etl_clinicaltrialsgov.extractors.ClinicalTrialsClient") as mock:
         yield mock

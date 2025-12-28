@@ -15,13 +15,13 @@ import pytest
 from coreason_etl_clinicaltrialsgov.extractors import clinicaltrials_source
 
 
-@pytest.fixture  # type: ignore[misc]
+@pytest.fixture
 def mock_client_class() -> Generator[MagicMock, None, None]:
     with patch("coreason_etl_clinicaltrialsgov.extractors.ClinicalTrialsClient") as mock:
         yield mock
 
 
-@pytest.fixture  # type: ignore[misc]
+@pytest.fixture
 def mock_dlt_state() -> Generator[dict[str, str], None, None]:
     # Mock dlt.current.source_state()
     # It returns a dict-like object that persists changes

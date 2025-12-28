@@ -28,7 +28,7 @@ class ClinicalTrialsClient:
         """
         self.session = session or requests.Session()
 
-    @retry(  # type: ignore[misc]
+    @retry(
         stop=stop_after_attempt(5),
         wait=wait_exponential(multiplier=1, min=4, max=10),
         reraise=True,
