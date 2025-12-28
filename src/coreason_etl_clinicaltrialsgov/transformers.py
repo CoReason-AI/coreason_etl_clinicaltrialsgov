@@ -285,8 +285,8 @@ def transform_gold(
 
     # Create Gold Model
     gold_model = GoldStudy(
-        source_id=silver_study["source_id"],
-        coreason_id=silver_study["coreason_id"],
+        source_id=silver_study.get("source_id"),
+        coreason_id=silver_study.get("coreason_id"),
         title=silver_study.get("title"),
         overall_status=overall_status,
         enrollment_bucket=bucket,
