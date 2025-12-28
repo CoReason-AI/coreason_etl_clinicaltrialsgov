@@ -8,12 +8,15 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
 
-from unittest.mock import patch, MagicMock
+from typing import Any
+from unittest.mock import MagicMock, patch
+
 from coreason_etl_clinicaltrialsgov.main import run_pipeline
+
 
 @patch("coreason_etl_clinicaltrialsgov.main.dlt.pipeline")
 @patch("coreason_etl_clinicaltrialsgov.main.clinicaltrials_source")
-def test_run_pipeline(mock_source, mock_pipeline):
+def test_run_pipeline(mock_source: Any, mock_pipeline: Any) -> None:
     # Setup mocks
     pipeline_instance = MagicMock()
     mock_pipeline.return_value = pipeline_instance
@@ -25,10 +28,7 @@ def test_run_pipeline(mock_source, mock_pipeline):
 
     # Verify calls
     mock_pipeline.assert_called_once_with(
-        pipeline_name="clinicaltrials_etl",
-        destination="postgres",
-        dataset_name="clinical_trials_data",
-        progress="log"
+        pipeline_name="clinicaltrials_etl", destination="postgres", dataset_name="clinical_trials_data", progress="log"
     )
     mock_source.assert_called_once()
     pipeline_instance.run.assert_called_once_with("Source")

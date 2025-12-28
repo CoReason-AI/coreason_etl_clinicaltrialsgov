@@ -14,6 +14,7 @@ from typing import Any, Optional
 
 # --- Helpers ---
 
+
 def parse_date(date_str: Optional[str]) -> Optional[date]:
     """Parse partial dates into a date object."""
     if not date_str:
@@ -29,6 +30,7 @@ def parse_date(date_str: Optional[str]) -> Optional[date]:
     except ValueError:
         return None
     return None
+
 
 def normalize_age(age_str: Optional[str]) -> Optional[float]:
     """Normalize age string to years (float)."""
@@ -63,17 +65,20 @@ def normalize_age(age_str: Optional[str]) -> Optional[float]:
     # Hour/Minute? Unlikely for clinical trials eligibility, but treat as 0 or None?
     return value  # Default to value if unit unknown? Or years?
 
+
 def generate_coreason_id(nct_id: str, first_received_date: Optional[str]) -> str:
     """Generate deterministic UUID."""
     # coreason_id: uuid5(uuid.NAMESPACE_DNS, "clinicaltrials.gov/" + nctId + "/" + firstReceivedDate)
     seed = f"clinicaltrials.gov/{nct_id}/{first_received_date or ''}"
     return str(uuid.uuid5(uuid.NAMESPACE_DNS, seed))
 
+
 def flatten_phases(phases: Optional[list[str]]) -> Optional[str]:
     """Sort and join phases."""
     if not phases:
         return None
     return "|".join(sorted(phases))
+
 
 def get_enrollment_bucket(count: Optional[int]) -> Optional[str]:
     """Categorize enrollment count."""
@@ -86,7 +91,9 @@ def get_enrollment_bucket(count: Optional[int]) -> Optional[str]:
     else:
         return "Large"
 
+
 # --- Transformation Logic ---
+
 
 def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     """Transform a raw study dictionary into Silver layer tables."""
@@ -130,54 +137,62 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
     sponsors_module = protocol.get("sponsorCollaboratorsModule", {})
     lead = sponsors_module.get("leadSponsor")
     if lead:
-        silver_sponsors.append({
-            "source_id": nct_id,
-            "coreason_id": c_id,
-            "name": lead.get("name"),
-            "agency_class": lead.get("class"),
-            "role": "LEAD"
-        })
+        silver_sponsors.append(
+            {
+                "source_id": nct_id,
+                "coreason_id": c_id,
+                "name": lead.get("name"),
+                "agency_class": lead.get("class"),
+                "role": "LEAD",
+            }
+        )
 
     collaborators = sponsors_module.get("collaborators", [])
     for collab in collaborators:
-        silver_sponsors.append({
-            "source_id": nct_id,
-            "coreason_id": c_id,
-            "name": collab.get("name"),
-            "agency_class": collab.get("class"),
-            "role": "COLLABORATOR"
-        })
+        silver_sponsors.append(
+            {
+                "source_id": nct_id,
+                "coreason_id": c_id,
+                "name": collab.get("name"),
+                "agency_class": collab.get("class"),
+                "role": "COLLABORATOR",
+            }
+        )
 
     # 3. Silver Locations
     silver_locations = []
     locations_module = protocol.get("contactsLocationsModule", {})
     locations = locations_module.get("locations", [])
     for loc in locations:
-        silver_locations.append({
-            "source_id": nct_id,
-            "coreason_id": c_id,
-            "facility": loc.get("facility"),
-            "city": loc.get("city"),
-            "state": loc.get("state"),
-            "zip": loc.get("zip"),
-            "country": loc.get("country"),
-            "status": loc.get("status"), # Location status
-            "geo_point": loc.get("geoPoint") # If available
-        })
+        silver_locations.append(
+            {
+                "source_id": nct_id,
+                "coreason_id": c_id,
+                "facility": loc.get("facility"),
+                "city": loc.get("city"),
+                "state": loc.get("state"),
+                "zip": loc.get("zip"),
+                "country": loc.get("country"),
+                "status": loc.get("status"),  # Location status
+                "geo_point": loc.get("geoPoint"),  # If available
+            }
+        )
 
     # 4. Silver Interventions
     silver_interventions = []
     arms_module = protocol.get("armsInterventionsModule", {})
     interventions = arms_module.get("interventions", [])
     for interv in interventions:
-        silver_interventions.append({
-            "source_id": nct_id,
-            "coreason_id": c_id,
-            "type": interv.get("type"),
-            "name": interv.get("name"),
-            "description": interv.get("description"),
-            "other_names": interv.get("otherNames", [])
-        })
+        silver_interventions.append(
+            {
+                "source_id": nct_id,
+                "coreason_id": c_id,
+                "type": interv.get("type"),
+                "name": interv.get("name"),
+                "description": interv.get("description"),
+                "other_names": interv.get("otherNames", []),
+            }
+        )
 
     # 5. Silver Outcomes
     silver_outcomes = []
@@ -185,14 +200,16 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
     for outcome_type in ["primaryOutcomes", "secondaryOutcomes", "otherOutcomes"]:
         outcomes = outcomes_module.get(outcome_type, [])
         for out in outcomes:
-            silver_outcomes.append({
-                "source_id": nct_id,
-                "coreason_id": c_id,
-                "outcome_type": outcome_type.replace("Outcomes", "").upper(), # PRIMARY, SECONDARY, OTHER
-                "measure": out.get("measure"),
-                "description": out.get("description"),
-                "time_frame": out.get("timeFrame")
-            })
+            silver_outcomes.append(
+                {
+                    "source_id": nct_id,
+                    "coreason_id": c_id,
+                    "outcome_type": outcome_type.replace("Outcomes", "").upper(),  # PRIMARY, SECONDARY, OTHER
+                    "measure": out.get("measure"),
+                    "description": out.get("description"),
+                    "time_frame": out.get("timeFrame"),
+                }
+            )
 
     # 6. Silver References
     silver_references = []
@@ -200,24 +217,28 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
 
     refs = refs_module.get("references", [])
     for ref in refs:
-        silver_references.append({
-            "source_id": nct_id,
-            "coreason_id": c_id,
-            "type": "REFERENCE",
-            "pmid": ref.get("pmid"),
-            "citation": ref.get("citation"),
-            "retraction": ref.get("retraction")
-        })
+        silver_references.append(
+            {
+                "source_id": nct_id,
+                "coreason_id": c_id,
+                "type": "REFERENCE",
+                "pmid": ref.get("pmid"),
+                "citation": ref.get("citation"),
+                "retraction": ref.get("retraction"),
+            }
+        )
 
     links = refs_module.get("seeAlsoLinks", [])
     for link in links:
-        silver_references.append({
-             "source_id": nct_id,
-             "coreason_id": c_id,
-             "type": "LINK",
-             "label": link.get("label"),
-             "url": link.get("url")
-        })
+        silver_references.append(
+            {
+                "source_id": nct_id,
+                "coreason_id": c_id,
+                "type": "LINK",
+                "label": link.get("label"),
+                "url": link.get("url"),
+            }
+        )
 
     return {
         "silver_studies": [silver_study],
@@ -225,10 +246,13 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
         "silver_locations": silver_locations,
         "silver_interventions": silver_interventions,
         "silver_outcomes": silver_outcomes,
-        "silver_references": silver_references
+        "silver_references": silver_references,
     }
 
-def transform_gold(raw_study: dict[str, Any], silver_study: dict[str, Any], locations: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
+
+def transform_gold(
+    raw_study: dict[str, Any], silver_study: dict[str, Any], locations: list[dict[str, Any]]
+) -> Optional[dict[str, Any]]:
     """Transform to Gold layer. Returns None if filtered out."""
 
     valid_statuses = {"RECRUITING", "ACTIVE_NOT_RECRUITING", "COMPLETED", "SUSPENDED", "TERMINATED"}
@@ -264,5 +288,5 @@ def transform_gold(raw_study: dict[str, Any], silver_study: dict[str, Any], loca
         "enrollment_bucket": bucket,
         "years_active": years_active,
         "has_results": has_results,
-        "geo_countries": geo_countries
+        "geo_countries": geo_countries,
     }

@@ -8,19 +8,21 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
 
-import pytest
 from datetime import date
+from typing import Any
+
 from coreason_etl_clinicaltrialsgov.transformers import (
-    parse_date,
-    normalize_age,
     flatten_phases,
     generate_coreason_id,
-    transform_study,
+    get_enrollment_bucket,
+    normalize_age,
+    parse_date,
     transform_gold,
-    get_enrollment_bucket
+    transform_study,
 )
 
-def test_parse_date():
+
+def test_parse_date() -> None:
     assert parse_date("2023-01-15") == date(2023, 1, 15)
     assert parse_date("2023-01") == date(2023, 1, 1)
     assert parse_date("2023") == date(2023, 1, 1)
@@ -29,12 +31,13 @@ def test_parse_date():
     # Test fallthrough (too many parts)
     assert parse_date("2023-01-01-01") is None
 
-def test_normalize_age():
+
+def test_normalize_age() -> None:
     assert normalize_age("18 Years") == 18.0
     assert normalize_age("24 Months") == 2.0
     assert normalize_age("52 Weeks") == 1.0
     assert normalize_age("365 Days") == 1.0
-    assert normalize_age("18") == 18.0 # Fallback
+    assert normalize_age("18") == 18.0  # Fallback
     assert normalize_age("Unknown") is None
     assert normalize_age(None) is None
     # Test invalid number format
@@ -43,12 +46,14 @@ def test_normalize_age():
     # Test unknown unit
     assert normalize_age("18 Centuries") == 18.0
 
-def test_flatten_phases():
+
+def test_flatten_phases() -> None:
     assert flatten_phases(["PHASE1", "PHASE2"]) == "PHASE1|PHASE2"
     assert flatten_phases(["PHASE2", "PHASE1"]) == "PHASE1|PHASE2"
     assert flatten_phases(None) is None
 
-def test_generate_coreason_id():
+
+def test_generate_coreason_id() -> None:
     uuid_1 = generate_coreason_id("NCT001", "2023-01-01")
     uuid_2 = generate_coreason_id("NCT001", "2023-01-01")
     uuid_3 = generate_coreason_id("NCT002", "2023-01-01")
@@ -56,23 +61,17 @@ def test_generate_coreason_id():
     assert uuid_1 == uuid_2
     assert uuid_1 != uuid_3
 
-def test_transform_study_basic():
-    raw = {
+
+def test_transform_study_basic() -> None:
+    raw: dict[str, Any] = {
         "protocolSection": {
-            "identificationModule": {
-                "nctId": "NCT123",
-                "briefTitle": "Test Study"
-            },
+            "identificationModule": {"nctId": "NCT123", "briefTitle": "Test Study"},
             "statusModule": {
                 "startDateStruct": {"date": "2023-01-01"},
-                "studyFirstPostDateStruct": {"date": "2022-01-01"}
+                "studyFirstPostDateStruct": {"date": "2022-01-01"},
             },
-            "sponsorCollaboratorsModule": {
-                "leadSponsor": {"name": "PharmaCorp", "class": "INDUSTRY"}
-            },
-            "designModule": {
-                "phases": ["PHASE1"]
-            }
+            "sponsorCollaboratorsModule": {"leadSponsor": {"name": "PharmaCorp", "class": "INDUSTRY"}},
+            "designModule": {"phases": ["PHASE1"]},
         }
     }
 
@@ -89,28 +88,20 @@ def test_transform_study_basic():
     assert sponsors[0]["name"] == "PharmaCorp"
     assert sponsors[0]["role"] == "LEAD"
 
-def test_transform_study_full():
-    raw = {
+
+def test_transform_study_full() -> None:
+    raw: dict[str, Any] = {
         "protocolSection": {
             "identificationModule": {"nctId": "NCT999"},
             "statusModule": {},
-            "sponsorCollaboratorsModule": {
-                "leadSponsor": {"name": "Lead"},
-                "collaborators": [{"name": "Collab"}]
-            },
-            "contactsLocationsModule": {
-                "locations": [{"city": "New York", "country": "USA"}]
-            },
-            "armsInterventionsModule": {
-                "interventions": [{"type": "DRUG", "name": "Aspirin"}]
-            },
-            "outcomesModule": {
-                "primaryOutcomes": [{"measure": "Survival"}]
-            },
+            "sponsorCollaboratorsModule": {"leadSponsor": {"name": "Lead"}, "collaborators": [{"name": "Collab"}]},
+            "contactsLocationsModule": {"locations": [{"city": "New York", "country": "USA"}]},
+            "armsInterventionsModule": {"interventions": [{"type": "DRUG", "name": "Aspirin"}]},
+            "outcomesModule": {"primaryOutcomes": [{"measure": "Survival"}]},
             "referencesModule": {
                 "references": [{"pmid": "123", "citation": "Cit"}],
-                "seeAlsoLinks": [{"url": "http://example.com"}]
-            }
+                "seeAlsoLinks": [{"url": "http://example.com"}],
+            },
         }
     }
 
@@ -133,18 +124,21 @@ def test_transform_study_full():
     assert result["silver_references"][0]["type"] == "REFERENCE"
     assert result["silver_references"][1]["type"] == "LINK"
 
-def test_transform_study_empty():
+
+def test_transform_study_empty() -> None:
     result = transform_study({})
     assert result == {}
 
-def test_get_enrollment_bucket():
+
+def test_get_enrollment_bucket() -> None:
     assert get_enrollment_bucket(None) is None
     assert get_enrollment_bucket(50) == "Small"
     assert get_enrollment_bucket(200) == "Medium"
     assert get_enrollment_bucket(2000) == "Large"
 
-def test_transform_gold_valid():
-    raw = {"resultsSection": {}}
+
+def test_transform_gold_valid() -> None:
+    raw: dict[str, Any] = {"resultsSection": {}}
     silver = {
         "source_id": "NCT001",
         "coreason_id": "UUID",
@@ -152,37 +146,38 @@ def test_transform_gold_valid():
         "overall_status": "RECRUITING",
         "start_date": date(2020, 1, 1),
         "completion_date": date(2021, 1, 1),
-        "enrollment_count": 50
+        "enrollment_count": 50,
     }
-    locations = [{"country": "USA"}, {"country": "Canada"}, {"country": "USA"}]
+    locations: list[dict[str, Any]] = [{"country": "USA"}, {"country": "Canada"}, {"country": "USA"}]
 
     gold = transform_gold(raw, silver, locations)
 
+    assert gold is not None
     assert gold["overall_status"] == "RECRUITING"
     assert gold["enrollment_bucket"] == "Small"
     assert abs(gold["years_active"] - 1.0) < 0.01
     assert gold["has_results"] is True
     assert set(gold["geo_countries"]) == {"USA", "Canada"}
 
-def test_transform_gold_filtered():
-    raw = {}
+
+def test_transform_gold_filtered() -> None:
+    raw: dict[str, Any] = {}
     silver = {
-        "overall_status": "WITHDRAWN" # Not in valid set
+        "overall_status": "WITHDRAWN"  # Not in valid set
     }
-    locations = []
+    locations: list[dict[str, Any]] = []
 
     gold = transform_gold(raw, silver, locations)
     assert gold is None
 
-def test_transform_gold_missing_dates():
-    raw = {}
-    silver = {
-        "overall_status": "COMPLETED",
-        "enrollment_count": None
-    }
-    locations = []
+
+def test_transform_gold_missing_dates() -> None:
+    raw: dict[str, Any] = {}
+    silver = {"overall_status": "COMPLETED", "enrollment_count": None}
+    locations: list[dict[str, Any]] = []
 
     gold = transform_gold(raw, silver, locations)
+    assert gold is not None
     assert gold["years_active"] is None
     assert gold["enrollment_bucket"] is None
     assert gold["has_results"] is False

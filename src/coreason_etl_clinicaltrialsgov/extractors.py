@@ -9,20 +9,18 @@
 # Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
 
 from datetime import datetime, timezone
-from typing import Iterator, Optional, Any
+from typing import Iterator, Optional
 
 import dlt
 from dlt.common.typing import TDataItems
 from dlt.sources import DltResource
 
 from coreason_etl_clinicaltrialsgov.client import ClinicalTrialsClient
-from coreason_etl_clinicaltrialsgov.transformers import transform_study, transform_gold
+from coreason_etl_clinicaltrialsgov.transformers import transform_gold, transform_study
+
 
 @dlt.source(name="clinicaltrials")
-def clinicaltrials_source(
-    page_size: int = 100,
-    query_term: Optional[str] = None
-) -> Iterator[DltResource]:
+def clinicaltrials_source(page_size: int = 100, query_term: Optional[str] = None) -> Iterator[DltResource]:
     """
     The ClinicalTrials.gov V2 API source.
     Produces Bronze, Silver, and Gold tables.
@@ -47,11 +45,7 @@ def clinicaltrials_source(
             now_ts = datetime.now(timezone.utc).isoformat()
 
             # 1. Bronze Layer
-            bronze_record = {
-                "source_id": nct_id,
-                "ingestion_ts": now_ts,
-                "raw_payload": raw_study
-            }
+            bronze_record = {"source_id": nct_id, "ingestion_ts": now_ts, "raw_payload": raw_study}
             yield dlt.mark.with_table_name(bronze_record, "bronze_studies")
 
             # 2. Silver Layer

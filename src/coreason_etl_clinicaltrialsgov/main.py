@@ -13,6 +13,7 @@ import sys
 
 import dlt
 from loguru import logger
+
 from coreason_etl_clinicaltrialsgov.extractors import clinicaltrials_source
 
 logger.remove()
@@ -30,10 +31,7 @@ def run_pipeline() -> None:
     # We assume environment is configured.
 
     pipeline = dlt.pipeline(
-        pipeline_name="clinicaltrials_etl",
-        destination="postgres",
-        dataset_name="clinical_trials_data",
-        progress="log"
+        pipeline_name="clinicaltrials_etl", destination="postgres", dataset_name="clinical_trials_data", progress="log"
     )
 
     # Load data
@@ -45,6 +43,7 @@ def run_pipeline() -> None:
     info = pipeline.run(source)
 
     logger.info(f"Pipeline finished. Load info: {info}")
+
 
 if __name__ == "__main__":  # pragma: no cover
     run_pipeline()

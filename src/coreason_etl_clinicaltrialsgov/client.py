@@ -8,7 +8,7 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
 
-from typing import Any, Generator, Iterator, Optional
+from typing import Any, Iterator, Optional, cast
 
 import requests
 from loguru import logger
@@ -58,7 +58,7 @@ class ClinicalTrialsClient:
         try:
             response = self.session.get(self.BASE_URL, params=params, timeout=30)
             response.raise_for_status()
-            return response.json()
+            return cast(dict[str, Any], response.json())
         except requests.HTTPError as e:
             if e.response is not None and e.response.status_code == 429:
                 logger.warning(f"Rate limited (429). Retrying... {e}")
@@ -69,9 +69,7 @@ class ClinicalTrialsClient:
             logger.error(f"Request failed: {e}")
             raise
 
-    def list_studies(
-        self, page_size: int = 100, query_term: Optional[str] = None
-    ) -> Iterator[dict[str, Any]]:
+    def list_studies(self, page_size: int = 100, query_term: Optional[str] = None) -> Iterator[dict[str, Any]]:
         """Yield studies from the API, handling pagination.
 
         Args:
@@ -84,9 +82,7 @@ class ClinicalTrialsClient:
         next_page_token: Optional[str] = None
 
         while True:
-            data = self.fetch_studies(
-                page_token=next_page_token, page_size=page_size, query_term=query_term
-            )
+            data = self.fetch_studies(page_token=next_page_token, page_size=page_size, query_term=query_term)
             studies = data.get("studies", [])
             for study in studies:
                 yield study

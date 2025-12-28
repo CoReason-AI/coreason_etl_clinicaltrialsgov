@@ -8,7 +8,8 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
 
-from .client import ClinicalTrialsClient
-from .transformers import transform_study, transform_gold
-from .extractors import clinicaltrials_source
-from .main import run_pipeline
+from .client import ClinicalTrialsClient as ClinicalTrialsClient
+from .extractors import clinicaltrials_source as clinicaltrials_source
+from .main import run_pipeline as run_pipeline
+from .transformers import transform_gold as transform_gold
+from .transformers import transform_study as transform_study

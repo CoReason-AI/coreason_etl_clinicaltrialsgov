@@ -8,17 +8,21 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
 
+from typing import Any, Generator
+from unittest.mock import patch
+
 import pytest
-import dlt
-from unittest.mock import MagicMock, patch
+
 from coreason_etl_clinicaltrialsgov.extractors import clinicaltrials_source
 
+
 @pytest.fixture
-def mock_client_class():
+def mock_client_class() -> Generator[Any, None, None]:
     with patch("coreason_etl_clinicaltrialsgov.extractors.ClinicalTrialsClient") as mock:
         yield mock
 
-def test_clinicaltrials_source_yields_tables(mock_client_class):
+
+def test_clinicaltrials_source_yields_tables(mock_client_class: Any) -> None:
     # Setup mock data
     mock_instance = mock_client_class.return_value
 
@@ -28,9 +32,9 @@ def test_clinicaltrials_source_yields_tables(mock_client_class):
             "statusModule": {"overallStatus": "RECRUITING"},
             "designModule": {"phases": ["PHASE1"]},
             "sponsorCollaboratorsModule": {"leadSponsor": {"name": "Sponsor1"}},
-            "contactsLocationsModule": {"locations": [{"country": "USA"}]}
+            "contactsLocationsModule": {"locations": [{"country": "USA"}]},
         },
-        "resultsSection": {}
+        "resultsSection": {},
     }
 
     mock_instance.list_studies.return_value = iter([raw_study])
@@ -50,12 +54,12 @@ def test_clinicaltrials_source_yields_tables(mock_client_class):
     # Categorize by keys since we can't easily rely on _dlt_meta in mocked unit test context
     # unless we verify dlt.mark behavior.
 
-    items_by_type = {
+    items_by_type: dict[str, list[Any]] = {
         "bronze": [],
         "silver_study": [],
         "silver_sponsor": [],
         "silver_location": [],
-        "gold": []
+        "gold": [],
     }
 
     for item in items:
@@ -65,7 +69,7 @@ def test_clinicaltrials_source_yields_tables(mock_client_class):
             items_by_type["silver_study"].append(item)
         elif "role" in item:
             items_by_type["silver_sponsor"].append(item)
-        elif "city" in item: # Location keys
+        elif "city" in item:  # Location keys
             items_by_type["silver_location"].append(item)
         elif "enrollment_bucket" in item:
             items_by_type["gold"].append(item)
@@ -82,7 +86,8 @@ def test_clinicaltrials_source_yields_tables(mock_client_class):
     assert len(items_by_type["gold"]) == 1
     assert items_by_type["gold"][0]["overall_status"] == "RECRUITING"
 
-def test_clinicaltrials_source_skips_invalid(mock_client_class):
+
+def test_clinicaltrials_source_skips_invalid(mock_client_class: Any) -> None:
     mock_instance = mock_client_class.return_value
     # No NCT ID
     mock_instance.list_studies.return_value = iter([{}])
@@ -92,13 +97,14 @@ def test_clinicaltrials_source_skips_invalid(mock_client_class):
     items = list(resource)
     assert len(items) == 0
 
-def test_clinicaltrials_source_filters_gold(mock_client_class):
+
+def test_clinicaltrials_source_filters_gold(mock_client_class: Any) -> None:
     mock_instance = mock_client_class.return_value
 
     raw_study = {
         "protocolSection": {
             "identificationModule": {"nctId": "NCT123"},
-            "statusModule": {"overallStatus": "WITHDRAWN"}, # Invalid for Gold
+            "statusModule": {"overallStatus": "WITHDRAWN"},  # Invalid for Gold
         }
     }
 
