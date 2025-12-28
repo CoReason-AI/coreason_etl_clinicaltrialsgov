@@ -13,7 +13,6 @@ from typing import Any, Generator
 from unittest.mock import patch
 
 import pytest
-
 from coreason_etl_clinicaltrialsgov.extractors import clinicaltrials_source
 from coreason_etl_clinicaltrialsgov.transformers import (
     get_enrollment_bucket,
@@ -143,7 +142,7 @@ def test_transform_gold_case_insensitive_status() -> None:
 # --- Extractor Complex Tests ---
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[misc]
 def mock_client_class() -> Generator[Any, None, None]:
     with patch("coreason_etl_clinicaltrialsgov.extractors.ClinicalTrialsClient") as mock:
         yield mock

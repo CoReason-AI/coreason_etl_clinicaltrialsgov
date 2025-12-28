@@ -12,17 +12,16 @@ from typing import Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from coreason_etl_clinicaltrialsgov.extractors import clinicaltrials_source
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[misc]
 def mock_client_class() -> Generator[MagicMock, None, None]:
     with patch("coreason_etl_clinicaltrialsgov.extractors.ClinicalTrialsClient") as mock:
         yield mock
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[misc]
 def mock_dlt_state() -> Generator[dict[str, str], None, None]:
     # Mock dlt.current.source_state()
     # It returns a dict-like object that persists changes

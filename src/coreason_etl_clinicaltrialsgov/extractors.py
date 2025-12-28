@@ -20,14 +20,14 @@ from coreason_etl_clinicaltrialsgov.client import ClinicalTrialsClient
 from coreason_etl_clinicaltrialsgov.transformers import transform_gold, transform_study
 
 
-@dlt.source(name="clinicaltrials")
+@dlt.source(name="clinicaltrials")  # type: ignore[misc]
 def clinicaltrials_source(page_size: int = 100, query_term: Optional[str] = None) -> Iterator[DltResource]:
     """
     The ClinicalTrials.gov V2 API source.
     Produces Bronze, Silver, and Gold tables.
     """
 
-    @dlt.resource(name="studies_stream", write_disposition="merge", primary_key="source_id")
+    @dlt.resource(name="studies_stream", write_disposition="merge", primary_key="source_id")  # type: ignore[misc]
     def studies_generator() -> Iterator[TDataItems]:
         client = ClinicalTrialsClient()
 

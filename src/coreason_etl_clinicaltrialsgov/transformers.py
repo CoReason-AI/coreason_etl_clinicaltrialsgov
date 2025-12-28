@@ -237,18 +237,6 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
             )
         )
 
-    links = refs_module.get("seeAlsoLinks", [])
-    for link in links:
-        silver_references_list.append(
-            SilverReference(
-                source_id=nct_id,
-                coreason_id=c_id,
-                type="LINK",
-                label=link.get("label"),
-                url=link.get("url"),
-            )
-        )
-
     return {
         "silver_studies": [silver_study_model.model_dump()],
         "silver_sponsors": [s.model_dump() for s in silver_sponsors_list],

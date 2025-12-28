@@ -13,7 +13,6 @@ from datetime import date
 from typing import Any
 
 import pytest
-
 from coreason_etl_clinicaltrialsgov.transformers import (
     flatten_phases,
     generate_coreason_id,
@@ -27,7 +26,7 @@ from coreason_etl_clinicaltrialsgov.transformers import (
 # --- Helper Tests ---
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametrize(  # type: ignore[misc]
     "input_str, expected",
     [
         ("2023-10-01", date(2023, 10, 1)),
@@ -42,7 +41,7 @@ def test_parse_date(input_str: str | None, expected: date | None) -> None:
     assert parse_date(input_str) == expected
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametrize(  # type: ignore[misc]
     "input_str, expected",
     [
         ("18 Years", 18.0),
@@ -77,7 +76,7 @@ def test_flatten_phases() -> None:
     assert flatten_phases([]) is None
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametrize(  # type: ignore[misc]
     "count, expected",
     [
         (50, "Small"),
@@ -93,7 +92,7 @@ def test_get_enrollment_bucket(count: int | None, expected: str | None) -> None:
 # --- Transformation Logic Tests ---
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[misc]
 def sample_raw_study() -> dict[str, Any]:
     return {
         "protocolSection": {
@@ -197,11 +196,9 @@ def test_transform_study(sample_raw_study: dict[str, Any]) -> None:
 
     # Check References
     refs = result["silver_references"]
-    assert len(refs) == 2
+    assert len(refs) == 1
     assert refs[0]["type"] == "REFERENCE"
     assert refs[0]["pmid"] == "12345"
-    assert refs[1]["type"] == "LINK"
-    assert refs[1]["url"] == "http://example.com"
 
 
 def test_transform_study_empty_nct() -> None:
