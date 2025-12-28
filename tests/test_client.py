@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 import pytest
 import requests
+
 from coreason_etl_clinicaltrialsgov.client import ClinicalTrialsClient
 
 
@@ -118,3 +119,4 @@ def test_list_studies(client: ClinicalTrialsClient, requests_mock: Any) -> None:
     assert studies[0]["id"] == 1
     assert studies[2]["id"] == 3
     assert requests_mock.call_count == 2
+# strict import
