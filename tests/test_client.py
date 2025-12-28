@@ -119,4 +119,3 @@ def test_list_studies(client: ClinicalTrialsClient, requests_mock: Any) -> None:
     assert studies[0]["id"] == 1
     assert studies[2]["id"] == 3
     assert requests_mock.call_count == 2
-# strict import
