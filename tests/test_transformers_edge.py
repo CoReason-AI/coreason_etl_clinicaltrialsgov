@@ -35,7 +35,13 @@ def test_transform_gold_no_status() -> None:
 
 def test_transform_gold_partial_dates() -> None:
     # If start or end date is missing, years_active is None
-    silver_study = {"source_id": "1", "overall_status": "RECRUITING", "start_date": None, "completion_date": None}
+    silver_study = {
+        "source_id": "1",
+        "coreason_id": "uuid",
+        "overall_status": "RECRUITING",
+        "start_date": None,
+        "completion_date": None,
+    }
     gold = transform_gold({"resultsSection": {}}, silver_study, [])
     assert gold is not None
     assert gold["years_active"] is None

@@ -13,6 +13,7 @@ from datetime import date
 from typing import Any, Optional
 
 from coreason_etl_clinicaltrialsgov.schemas import (
+    GoldStudy,
     SilverIntervention,
     SilverLocation,
     SilverOutcome,
@@ -265,12 +266,6 @@ def transform_gold(
     years_active = None
     if start and end:
         # Calculate years as float
-        # Ensure we have date objects if pydantic didn't give us (it should have)
-        # If silver_study is a dict from model_dump(), start and end are date objects or strings?
-        # Pydantic model_dump() usually keeps types by default unless mode='json'.
-        # But if it came from dlt extract/transform, it might be serialised?
-        # In this pipeline, `transform_study` returns model_dump() (dict of python objects).
-        # So start/end should be date objects or None.
         if isinstance(start, str):
             start = date.fromisoformat(start)
         if isinstance(end, str):
@@ -288,13 +283,16 @@ def transform_gold(
     # Geo countries
     geo_countries = list({loc.get("country") for loc in locations if loc.get("country")})
 
-    return {
-        "source_id": silver_study.get("source_id"),
-        "coreason_id": silver_study.get("coreason_id"),
-        "title": silver_study.get("title"),
-        "overall_status": overall_status,
-        "enrollment_bucket": bucket,
-        "years_active": years_active,
-        "has_results": has_results,
-        "geo_countries": geo_countries,
-    }
+    # Create Gold Model
+    gold_model = GoldStudy(
+        source_id=silver_study["source_id"],
+        coreason_id=silver_study["coreason_id"],
+        title=silver_study.get("title"),
+        overall_status=overall_status,
+        enrollment_bucket=bucket,
+        years_active=years_active,
+        has_results=has_results,
+        geo_countries=geo_countries,
+    )
+
+    return gold_model.model_dump()

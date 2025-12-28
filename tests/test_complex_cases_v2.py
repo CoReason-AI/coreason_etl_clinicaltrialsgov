@@ -93,6 +93,7 @@ def test_transform_study_results_section_presence() -> None:
     # Case 1: resultsSection present (dict)
     silver_study = {
         "source_id": "NCT_RESULTS",
+        "coreason_id": "UUID-123",
         "overall_status": "COMPLETED",
         "enrollment_count": 10,
     }
