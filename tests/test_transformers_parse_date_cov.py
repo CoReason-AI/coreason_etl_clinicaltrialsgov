@@ -24,3 +24,6 @@ def test_parse_date_coverage() -> None:
 
     # 1 part, but invalid year
     assert parse_date("NotAYear") is None
+
+    # 4 parts, falls through if/elif chain and hits final return None
+    assert parse_date("2023-01-01-01") is None
