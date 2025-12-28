@@ -8,14 +8,7 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
 
-"""
-Fast, extensible Python ETL to maintain a local ClinicalTrialsGov mirror
-"""
-
-__version__ = "0.1.0"
-__author__ = "Gowtham A Rao"
-__email__ = "gowtham.rao@coreason.ai"
-
-from .main import hello_world
-
-__all__ = ["hello_world"]
+from .client import ClinicalTrialsClient
+from .transformers import transform_study, transform_gold
+from .extractors import clinicaltrials_source
+from .main import run_pipeline
