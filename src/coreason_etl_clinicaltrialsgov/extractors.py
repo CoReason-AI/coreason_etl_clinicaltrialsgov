@@ -14,6 +14,7 @@ from typing import Iterator, Optional
 import dlt
 from dlt.common.typing import TDataItems
 from dlt.sources import DltResource
+from loguru import logger
 
 from coreason_etl_clinicaltrialsgov.client import ClinicalTrialsClient
 from coreason_etl_clinicaltrialsgov.transformers import transform_gold, transform_study
@@ -26,21 +27,37 @@ def clinicaltrials_source(page_size: int = 100, query_term: Optional[str] = None
     Produces Bronze, Silver, and Gold tables.
     """
 
-    # We define a single resource that emits to multiple tables dynamically.
-    # Alternatively, we could define separate resources but that might complicate the single-pass requirement
-    # without caching. dlt supports dynamic table routing.
-
     @dlt.resource(name="studies_stream", write_disposition="merge", primary_key="source_id")
     def studies_generator() -> Iterator[TDataItems]:
         client = ClinicalTrialsClient()
 
-        # We need to track load ID or similar? dlt handles load ids.
-        # Bronze requires `_dlt_load_id`? dlt adds `_dlt_load_id` automatically.
+        # State management for incremental loading
+        state = dlt.current.source_state()
+        last_date = state.get("last_updated_date")
 
-        for raw_study in client.list_studies(page_size=page_size, query_term=query_term):
+        current_query_term = query_term
+        if not current_query_term and last_date:
+            current_query_term = f"AREA[LastUpdatePostDate]RANGE[{last_date},MAX]"
+            logger.info(f"Incremental load enabled. Filter: {current_query_term}")
+        elif not current_query_term:
+            logger.info("Initial load (Full extraction). No filter.")
+        else:
+            logger.info(f"Custom query term provided: {current_query_term}")
+
+        max_date_seen = last_date
+
+        for raw_study in client.list_studies(page_size=page_size, query_term=current_query_term):
             nct_id = raw_study.get("protocolSection", {}).get("identificationModule", {}).get("nctId")
             if not nct_id:
                 continue
+
+            # Update High Water Mark
+            # Date format: YYYY-MM-DD
+            status_mod = raw_study.get("protocolSection", {}).get("statusModule", {})
+            study_date_str = status_mod.get("lastUpdatePostDateStruct", {}).get("date")
+            if study_date_str:
+                if not max_date_seen or study_date_str > max_date_seen:
+                    max_date_seen = study_date_str
 
             now_ts = datetime.now(timezone.utc).isoformat()
 
@@ -50,10 +67,7 @@ def clinicaltrials_source(page_size: int = 100, query_term: Optional[str] = None
 
             # 2. Silver Layer
             silver_data = transform_study(raw_study)
-            # transform_study returns a dict of lists. It is never empty if nct_id is present.
 
-            # Iterate over silver tables
-            # silver_studies is a list of 1 dict usually
             silver_study_record = None
             if silver_data.get("silver_studies"):
                 silver_study_record = silver_data["silver_studies"][0]
@@ -65,10 +79,14 @@ def clinicaltrials_source(page_size: int = 100, query_term: Optional[str] = None
 
             # 3. Gold Layer
             if silver_study_record:
-                # We need locations for gold
                 locations = silver_data.get("silver_locations", [])
                 gold_record = transform_gold(raw_study, silver_study_record, locations)
                 if gold_record:
                     yield dlt.mark.with_table_name(gold_record, "gold_studies")
+
+        # Save the new high water mark
+        if max_date_seen:
+            state["last_updated_date"] = max_date_seen
+            logger.info(f"Updated high water mark to: {max_date_seen}")
 
     yield studies_generator
