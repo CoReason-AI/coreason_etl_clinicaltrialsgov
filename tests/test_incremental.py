@@ -12,6 +12,7 @@ from typing import Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from coreason_etl_clinicaltrialsgov.extractors import clinicaltrials_source
 
 

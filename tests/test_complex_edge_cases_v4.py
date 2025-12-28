@@ -44,9 +44,7 @@ def test_unicode_text_handling() -> None:
                 "briefTitle": "Study of ❤️ & 💊 in 日本",
                 "officialTitle": "Official 🔬 Study",
             },
-            "sponsorCollaboratorsModule": {
-                "leadSponsor": {"name": "München Pharma", "class": "INDUSTRY"}
-            },
+            "sponsorCollaboratorsModule": {"leadSponsor": {"name": "München Pharma", "class": "INDUSTRY"}},
         }
     }
 
