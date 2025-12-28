@@ -88,7 +88,7 @@ def test_fetch_studies_http_failure(client: ClinicalTrialsClient, requests_mock:
 
     # Reduce retry attempts to speed up failure test
     # We need to access the underlying retry object on the method
-    client.fetch_studies.retry.stop = lambda retry_state: retry_state.attempt_number >= 2  # type: ignore
+    client.fetch_studies.retry.stop = lambda retry_state: retry_state.attempt_number >= 2  # type: ignore[attr-defined]
 
     with patch("time.sleep"):
         with pytest.raises(requests.HTTPError):
@@ -99,7 +99,7 @@ def test_fetch_studies_connection_error(client: ClinicalTrialsClient, requests_m
     url = "https://clinicaltrials.gov/api/v2/studies"
     requests_mock.get(url, exc=requests.exceptions.ConnectionError)
 
-    client.fetch_studies.retry.stop = lambda retry_state: retry_state.attempt_number >= 2  # type: ignore
+    client.fetch_studies.retry.stop = lambda retry_state: retry_state.attempt_number >= 2  # type: ignore[attr-defined]
 
     with patch("time.sleep"):
         with pytest.raises(requests.exceptions.ConnectionError):

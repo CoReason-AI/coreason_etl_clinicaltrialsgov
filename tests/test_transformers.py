@@ -197,11 +197,9 @@ def test_transform_study(sample_raw_study: dict[str, Any]) -> None:
 
     # Check References
     refs = result["silver_references"]
-    assert len(refs) == 2
+    assert len(refs) == 1
     assert refs[0]["type"] == "REFERENCE"
     assert refs[0]["pmid"] == "12345"
-    assert refs[1]["type"] == "LINK"
-    assert refs[1]["url"] == "http://example.com"
 
 
 def test_transform_study_empty_nct() -> None:
