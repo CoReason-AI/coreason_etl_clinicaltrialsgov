@@ -88,7 +88,18 @@ class SilverReference(BaseModel):
     pmid: Optional[str] = None
     citation: Optional[str] = None
     retraction: Optional[dict[str, Any]] = None
-    label: Optional[str] = None
-    url: Optional[str] = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class GoldStudy(BaseModel):
+    source_id: str
+    coreason_id: str
+    title: Optional[str] = None
+    overall_status: str
+    enrollment_bucket: Optional[str] = None
+    years_active: Optional[float] = None
+    has_results: bool
+    geo_countries: list[str]
 
     model_config = ConfigDict(extra="ignore")

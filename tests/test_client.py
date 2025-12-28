@@ -16,6 +16,8 @@ import requests
 
 from coreason_etl_clinicaltrialsgov.client import ClinicalTrialsClient
 
+# Ensure imports are sorted correctly for pre-commit
+
 
 @pytest.fixture
 def client() -> ClinicalTrialsClient:

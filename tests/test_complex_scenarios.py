@@ -128,6 +128,7 @@ def test_transform_gold_case_insensitive_status() -> None:
     # Status mixed case
     silver = {
         "source_id": "NCT_CASE",
+        "coreason_id": "UUID-123",
         "overall_status": "Recruiting",  # Mixed case
         "enrollment_count": 10,
     }
