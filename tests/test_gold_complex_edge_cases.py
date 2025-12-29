@@ -12,8 +12,9 @@ from datetime import date
 from typing import Any
 
 import pytest
-from coreason_etl_clinicaltrialsgov.transformers import transform_gold
 from pydantic import ValidationError
+
+from coreason_etl_clinicaltrialsgov.transformers import transform_gold
 
 
 def test_years_active_leap_year_precision() -> None:

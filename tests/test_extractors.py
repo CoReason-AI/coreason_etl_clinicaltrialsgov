@@ -12,8 +12,9 @@ from typing import Any, Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
-from coreason_etl_clinicaltrialsgov.extractors import clinicaltrials_source
 from dlt.extract.items import DataItemWithMeta
+
+from coreason_etl_clinicaltrialsgov.extractors import clinicaltrials_source
 
 
 @pytest.fixture

@@ -15,8 +15,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
-from coreason_etl_clinicaltrialsgov.client import wait_for_retry_after
 from tenacity import RetryCallState
+
+from coreason_etl_clinicaltrialsgov.client import wait_for_retry_after
 
 
 @pytest.fixture
