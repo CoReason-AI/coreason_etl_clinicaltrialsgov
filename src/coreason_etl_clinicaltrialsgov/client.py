@@ -8,11 +8,56 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
 
+import email.utils
+from datetime import datetime, timezone
 from typing import Any, Iterator, Optional, cast
 
 import requests
 from loguru import logger
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import RetryCallState, retry, stop_after_attempt, wait_exponential
+from tenacity.wait import wait_base
+
+
+class wait_for_retry_after(wait_base):
+    """Wait strategy that respects the Retry-After header."""
+
+    def __init__(self, fallback: wait_base) -> None:
+        self.fallback = fallback
+
+    def __call__(self, retry_state: RetryCallState) -> float:
+        exc = retry_state.outcome.exception() if retry_state.outcome else None
+
+        if isinstance(exc, requests.HTTPError) and exc.response is not None and exc.response.status_code == 429:
+            retry_after = exc.response.headers.get("Retry-After")
+            if retry_after:
+                try:
+                    # Try parsing as integer seconds
+                    seconds = float(retry_after)
+                    if seconds >= 0:
+                        return seconds
+                    # Negative seconds are invalid per RFC; fall through to fallback
+                except ValueError:
+                    # Try parsing as HTTP Date
+                    try:
+                        parsed_date = email.utils.parsedate_to_datetime(retry_after)
+                        if parsed_date:
+                            now = datetime.now(timezone.utc)
+                            # Ensure both are offset-aware or convert if needed
+                            if parsed_date.tzinfo is None:
+                                # Assume GMT/UTC if not specified in parsing
+                                # (parsedate_to_datetime handles this usually)
+                                parsed_date = parsed_date.replace(tzinfo=timezone.utc)
+
+                            wait_seconds = (parsed_date - now).total_seconds()
+                            if wait_seconds > 0:
+                                return wait_seconds
+                            # If date is in the past, return 0.0 (immediate retry)
+                            return 0.0
+                    except Exception as e:
+                        logger.warning(f"Failed to parse Retry-After header '{retry_after}': {e}")
+
+        # Fallback to the default strategy
+        return self.fallback(retry_state)
 
 
 class ClinicalTrialsClient:
@@ -30,7 +75,7 @@ class ClinicalTrialsClient:
 
     @retry(
         stop=stop_after_attempt(5),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
+        wait=wait_for_retry_after(fallback=wait_exponential(multiplier=1, min=4, max=10)),
         reraise=True,
     )
     def fetch_studies(
