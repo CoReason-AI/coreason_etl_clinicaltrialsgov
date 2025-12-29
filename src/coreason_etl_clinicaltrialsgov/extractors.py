@@ -63,7 +63,10 @@ def clinicaltrials_source(page_size: int = 100, query_term: Optional[str] = None
 
             # 1. Bronze Layer
             bronze_record = {"source_id": nct_id, "ingestion_ts": now_ts, "raw_payload": raw_study}
-            yield dlt.mark.with_table_name(bronze_record, "bronze_studies")
+            yield dlt.mark.with_hints(
+                dlt.mark.with_table_name(bronze_record, "bronze_studies"),
+                dlt.mark.make_hints(write_disposition="merge", primary_key="source_id"),
+            )
 
             # 2. Silver Layer
             silver_data = transform_study(raw_study)
@@ -76,13 +79,16 @@ def clinicaltrials_source(page_size: int = 100, query_term: Optional[str] = None
                 if records:
                     for record in records:
                         if table_name == "silver_studies":
-                            # Use source_id as PK (default for resource)
-                            yield dlt.mark.with_table_name(record, table_name)
+                            # Explicitly set merge and PK for main silver table
+                            yield dlt.mark.with_hints(
+                                dlt.mark.with_table_name(record, table_name),
+                                dlt.mark.make_hints(write_disposition="merge", primary_key="source_id"),
+                            )
                         else:
                             # Use new 'id' as PK for 1:N tables
                             yield dlt.mark.with_hints(
                                 dlt.mark.with_table_name(record, table_name),
-                                dlt.mark.make_hints(primary_key="id"),
+                                dlt.mark.make_hints(write_disposition="merge", primary_key="id"),
                             )
 
             # 3. Gold Layer
@@ -91,7 +97,10 @@ def clinicaltrials_source(page_size: int = 100, query_term: Optional[str] = None
                 gold_record = transform_gold(raw_study, silver_study_record, locations)
                 if gold_record:
                     # Gold uses source_id (NCT ID) as PK
-                    yield dlt.mark.with_table_name(gold_record, "gold_studies")
+                    yield dlt.mark.with_hints(
+                        dlt.mark.with_table_name(gold_record, "gold_studies"),
+                        dlt.mark.make_hints(write_disposition="merge", primary_key="source_id"),
+                    )
 
         # Save the new high water mark
         if max_date_seen:
