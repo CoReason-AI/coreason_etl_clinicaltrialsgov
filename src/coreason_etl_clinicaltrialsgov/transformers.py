@@ -77,12 +77,15 @@ def generate_coreason_id(nct_id: str, first_received_date: Optional[str]) -> str
     return str(uuid.uuid5(uuid.NAMESPACE_DNS, seed))
 
 
-def generate_surrogate_key(parent_id: str, *parts: str | None) -> str:
+def generate_surrogate_key(parent_id: str, *parts: str | int | None) -> str:
     """Generate deterministic UUID for child records."""
     # Concatenate all parts to form a unique seed for this record
     seed_parts = [parent_id]
     for p in parts:
-        seed_parts.append(p or "")
+        if p is None:
+            seed_parts.append("")
+        else:
+            seed_parts.append(str(p))
     seed = "|".join(seed_parts)
     return str(uuid.uuid5(uuid.NAMESPACE_DNS, seed))
 
@@ -152,7 +155,8 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
     sponsors_module = protocol.get("sponsorCollaboratorsModule", {})
     lead = sponsors_module.get("leadSponsor")
     if lead:
-        # Unique ID: nct_id + role + name
+        # Business Key: nct_id + role + name
+        # Non-identifying fields: agency_class
         name = lead.get("name")
         s_id = generate_surrogate_key(nct_id, "LEAD", name)
         if s_id not in seen_sponsors:
@@ -170,6 +174,7 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
 
     collaborators = sponsors_module.get("collaborators", [])
     for collab in collaborators:
+        # Business Key: nct_id + role + name
         name = collab.get("name")
         s_id = generate_surrogate_key(nct_id, "COLLABORATOR", name)
         if s_id not in seen_sponsors:
@@ -191,17 +196,13 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
     locations_module = protocol.get("contactsLocationsModule", {})
     locations = locations_module.get("locations", [])
     for loc in locations:
-        # Unique ID: nct_id + facility + city + country
-        # Note: multiple locations could have same facility name? Hopefully distinct enough.
-        # Adding geo_point? Maybe not stable if float.
-        # Let's use facility, city, state, country.
+        # Business Key: nct_id + facility + city + state + country
+        # Non-identifying fields: zip, status, geo_point
         facility = loc.get("facility")
         city = loc.get("city")
         state = loc.get("state")
         country = loc.get("country")
 
-        # If all are None, this might duplicate? But locations usually have some info.
-        # We'll include them all.
         s_id = generate_surrogate_key(nct_id, facility, city, state, country)
 
         if s_id not in seen_locations:
@@ -227,7 +228,8 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
     arms_module = protocol.get("armsInterventionsModule", {})
     interventions = arms_module.get("interventions", [])
     for interv in interventions:
-        # ID: nct_id + type + name
+        # Business Key: nct_id + type + name
+        # Non-identifying fields: description, otherNames
         i_type = interv.get("type")
         i_name = interv.get("name")
         s_id = generate_surrogate_key(nct_id, i_type, i_name)
@@ -254,7 +256,8 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
         outcomes = outcomes_module.get(outcome_type, [])
         normalized_type = outcome_type.replace("Outcomes", "").upper()
         for out in outcomes:
-            # ID: nct_id + type + measure + time_frame
+            # Business Key: nct_id + type + measure + time_frame
+            # Non-identifying fields: description
             measure = out.get("measure")
             time_frame = out.get("timeFrame")
             s_id = generate_surrogate_key(nct_id, normalized_type, measure, time_frame)
@@ -280,7 +283,8 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
 
     refs = refs_module.get("references", [])
     for ref in refs:
-        # ID: nct_id + pmid + citation
+        # Business Key: nct_id + type + pmid + citation
+        # Non-identifying fields: retraction
         pmid = ref.get("pmid")
         citation = ref.get("citation")
         s_id = generate_surrogate_key(nct_id, "REFERENCE", pmid, citation)
@@ -293,7 +297,7 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
                     source_id=nct_id,
                     coreason_id=c_id,
                     type="REFERENCE",
-                    pmid=pmid,
+                    pmid=str(pmid) if pmid is not None else None,
                     citation=citation,
                     retraction=ref.get("retraction"),
                 )
