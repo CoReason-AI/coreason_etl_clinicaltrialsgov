@@ -11,6 +11,7 @@
 from typing import Any
 
 import pytest
+
 from coreason_etl_clinicaltrialsgov.transformers import transform_study
 
 
@@ -76,7 +77,7 @@ def test_location_identity_stability(base_study: dict[str, Any]) -> None:
         "state": "MA",
         "country": "USA",
         "zip": "02114",
-        "status": "RECRUITING"
+        "status": "RECRUITING",
     }
     base_study["protocolSection"]["contactsLocationsModule"] = {"locations": [loc]}
 
@@ -97,12 +98,7 @@ def test_location_identity_stability(base_study: dict[str, Any]) -> None:
 
 def test_intervention_identity_stability(base_study: dict[str, Any]) -> None:
     """Test intervention ID stability (Keys: Type, Name)."""
-    interv = {
-        "type": "DRUG",
-        "name": "Aspirin",
-        "description": "100mg",
-        "otherNames": ["BrandA"]
-    }
+    interv = {"type": "DRUG", "name": "Aspirin", "description": "100mg", "otherNames": ["BrandA"]}
     base_study["protocolSection"]["armsInterventionsModule"] = {"interventions": [interv]}
 
     result1 = transform_study(base_study)
@@ -122,11 +118,7 @@ def test_intervention_identity_stability(base_study: dict[str, Any]) -> None:
 
 def test_outcome_identity_stability(base_study: dict[str, Any]) -> None:
     """Test outcome ID stability (Keys: Type, Measure, TimeFrame)."""
-    out = {
-        "measure": "Survival",
-        "timeFrame": "1 year",
-        "description": "Overall survival rate"
-    }
+    out = {"measure": "Survival", "timeFrame": "1 year", "description": "Overall survival rate"}
     # Primary Outcome
     base_study["protocolSection"]["outcomesModule"] = {"primaryOutcomes": [out]}
 
@@ -146,11 +138,7 @@ def test_outcome_identity_stability(base_study: dict[str, Any]) -> None:
 
 def test_reference_identity_stability(base_study: dict[str, Any]) -> None:
     """Test reference ID stability (Keys: PMID, Citation)."""
-    ref = {
-        "pmid": "12345",
-        "citation": "Smith et al.",
-        "retraction": {"pmid": "999"}
-    }
+    ref = {"pmid": "12345", "citation": "Smith et al.", "retraction": {"pmid": "999"}}
     base_study["protocolSection"]["referencesModule"] = {"references": [ref]}
 
     result1 = transform_study(base_study)
@@ -169,11 +157,7 @@ def test_reference_identity_stability(base_study: dict[str, Any]) -> None:
 
 def test_child_deduplication(base_study: dict[str, Any]) -> None:
     """Test that identical child records are deduplicated."""
-    interv = {
-        "type": "DRUG",
-        "name": "Aspirin",
-        "description": "100mg"
-    }
+    interv = {"type": "DRUG", "name": "Aspirin", "description": "100mg"}
     # Add same intervention twice
     base_study["protocolSection"]["armsInterventionsModule"] = {"interventions": [interv, interv]}
 
@@ -199,7 +183,7 @@ def test_key_type_safety(base_study: dict[str, Any]) -> None:
     """Test that non-string key components (e.g. integer PMID) do not crash the hash generation."""
     ref = {
         "pmid": 12345,  # Integer instead of string
-        "citation": "Some citation"
+        "citation": "Some citation",
     }
     base_study["protocolSection"]["referencesModule"] = {"references": [ref]}
 
