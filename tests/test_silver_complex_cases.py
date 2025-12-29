@@ -63,7 +63,7 @@ def test_surrogate_key_special_chars() -> None:
 
 
 def test_duplicate_deduplication_in_transform() -> None:
-    """Verify that identical source records produce identical IDs."""
+    """Verify that identical source records are deduplicated in transform."""
     raw_study = {
         "protocolSection": {
             "identificationModule": {"nctId": "NCT_DUP_TEST"},
@@ -80,14 +80,8 @@ def test_duplicate_deduplication_in_transform() -> None:
     result = transform_study(raw_study)
     sponsors = result["silver_sponsors"]
 
-    # Should have 2 records in the list (transform doesn't dedup the list itself, dlt does on load)
-    assert len(sponsors) == 2
-
-    # But their IDs must be identical
-    id1 = sponsors[0]["id"]
-    id2 = sponsors[1]["id"]
-
-    assert id1 == id2
+    # Deduplication enabled: should have 1 record
+    assert len(sponsors) == 1
 
     # Check content
     assert sponsors[0]["name"] == "Same Lab"
