@@ -41,7 +41,8 @@ class wait_for_retry_after(wait_base):
                             now = datetime.now(timezone.utc)
                             # Ensure both are offset-aware or convert if needed
                             if parsed_date.tzinfo is None:
-                                # Assume GMT/UTC if not specified in parsing (parsedate_to_datetime handles this usually)
+                                # Assume GMT/UTC if not specified in parsing
+                                # (parsedate_to_datetime handles this usually)
                                 parsed_date = parsed_date.replace(tzinfo=timezone.utc)
 
                             wait_seconds = (parsed_date - now).total_seconds()

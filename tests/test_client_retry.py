@@ -8,16 +8,15 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
 
-import time
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
-from tenacity import RetryCallState
-
 from coreason_etl_clinicaltrialsgov.client import ClinicalTrialsClient, wait_for_retry_after
+from tenacity import RetryCallState
 
 
 @pytest.fixture
@@ -33,7 +32,9 @@ def test_wait_for_retry_after_seconds(mock_retry_state: RetryCallState) -> None:
     response.status_code = 429
     response.headers["Retry-After"] = "10"
     exc = requests.HTTPError(response=response)
-    mock_retry_state.outcome.exception.return_value = exc
+
+    # Cast because Mypy complains about 'exception' on Future | None
+    cast(MagicMock, mock_retry_state.outcome).exception.return_value = exc
 
     # Setup fallback mock
     fallback = MagicMock()
@@ -55,7 +56,7 @@ def test_wait_for_retry_after_date(mock_retry_state: RetryCallState) -> None:
     response.status_code = 429
     response.headers["Retry-After"] = http_date
     exc = requests.HTTPError(response=response)
-    mock_retry_state.outcome.exception.return_value = exc
+    cast(MagicMock, mock_retry_state.outcome).exception.return_value = exc
 
     fallback = MagicMock()
 
@@ -83,7 +84,7 @@ def test_wait_for_retry_after_fallback_no_header(mock_retry_state: RetryCallStat
     response.status_code = 429
     # No header
     exc = requests.HTTPError(response=response)
-    mock_retry_state.outcome.exception.return_value = exc
+    cast(MagicMock, mock_retry_state.outcome).exception.return_value = exc
 
     fallback = MagicMock(return_value=5.0)
 
@@ -99,7 +100,7 @@ def test_wait_for_retry_after_fallback_other_error(mock_retry_state: RetryCallSt
     response = requests.Response()
     response.status_code = 500
     exc = requests.HTTPError(response=response)
-    mock_retry_state.outcome.exception.return_value = exc
+    cast(MagicMock, mock_retry_state.outcome).exception.return_value = exc
 
     fallback = MagicMock(return_value=2.0)
 
@@ -116,7 +117,7 @@ def test_wait_for_retry_after_parsing_error(mock_retry_state: RetryCallState) ->
     response.status_code = 429
     response.headers["Retry-After"] = "invalid"
     exc = requests.HTTPError(response=response)
-    mock_retry_state.outcome.exception.return_value = exc
+    cast(MagicMock, mock_retry_state.outcome).exception.return_value = exc
 
     fallback = MagicMock(return_value=3.0)
 
@@ -133,7 +134,7 @@ def test_wait_for_retry_after_exception_in_parsing(mock_retry_state: RetryCallSt
     response.status_code = 429
     response.headers["Retry-After"] = "invalid"
     exc = requests.HTTPError(response=response)
-    mock_retry_state.outcome.exception.return_value = exc
+    cast(MagicMock, mock_retry_state.outcome).exception.return_value = exc
 
     # Mock fallback
     fallback = MagicMock(return_value=1.0)
@@ -144,7 +145,9 @@ def test_wait_for_retry_after_exception_in_parsing(mock_retry_state: RetryCallSt
     # Actually, ValueError is already caught.
     # We want to trigger the generic Exception catch.
 
-    with patch("coreason_etl_clinicaltrialsgov.client.email.utils.parsedate_to_datetime", side_effect=Exception("Boom")):
+    with patch(
+        "coreason_etl_clinicaltrialsgov.client.email.utils.parsedate_to_datetime", side_effect=Exception("Boom")
+    ):
         wait_time = waiter(mock_retry_state)
 
         # Should fallback
@@ -163,7 +166,7 @@ def test_client_fetch_studies_retry_logic() -> None:
     # Create responses
     resp_429 = requests.Response()
     resp_429.status_code = 429
-    resp_429.headers["Retry-After"] = "0.1" # Fast retry
+    resp_429.headers["Retry-After"] = "0.1"  # Fast retry
 
     resp_200 = requests.Response()
     resp_200.status_code = 200
@@ -186,7 +189,8 @@ def test_client_fetch_studies_retry_logic() -> None:
         # Tenacity calls time.sleep
         mock_sleep.assert_called()
         args, _ = mock_sleep.call_args
-        assert 0.09 <= args[0] <= 0.15 # Allow small float error
+        assert 0.09 <= args[0] <= 0.15  # Allow small float error
+
 
 def test_wait_for_retry_after_date_naive(mock_retry_state: RetryCallState) -> None:
     """Test when parsed date is naive (no tzinfo)."""
@@ -199,13 +203,13 @@ def test_wait_for_retry_after_date_naive(mock_retry_state: RetryCallState) -> No
     # or naive if not.
     # Let's mock parsedate_to_datetime to return a naive datetime
 
-    naive_future = datetime.fromtimestamp(future_ts) # naive
+    naive_future = datetime.fromtimestamp(future_ts)  # naive
 
     response = requests.Response()
     response.status_code = 429
-    response.headers["Retry-After"] = "Tue, 15 Nov 1994 08:12:31 GMT" # Dummy string, we mock return
+    response.headers["Retry-After"] = "Tue, 15 Nov 1994 08:12:31 GMT"  # Dummy string, we mock return
     exc = requests.HTTPError(response=response)
-    mock_retry_state.outcome.exception.return_value = exc
+    cast(MagicMock, mock_retry_state.outcome).exception.return_value = exc
 
     fallback = MagicMock()
     waiter = wait_for_retry_after(fallback=fallback)
