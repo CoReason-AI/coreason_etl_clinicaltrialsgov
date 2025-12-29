@@ -61,13 +61,8 @@ def test_unicode_emoji_handling() -> None:
 
     raw_study = {
         "protocolSection": {
-            "identificationModule": {
-                "nctId": "NCT_UNICODE",
-                "briefTitle": title_with_emoji
-            },
-            "contactsLocationsModule": {
-                "locations": [{"facility": facility_jp, "city": "Tokyo", "country": "Japan"}]
-            }
+            "identificationModule": {"nctId": "NCT_UNICODE", "briefTitle": title_with_emoji},
+            "contactsLocationsModule": {"locations": [{"facility": facility_jp, "city": "Tokyo", "country": "Japan"}]},
         }
     }
 
@@ -88,9 +83,7 @@ def test_deduplication_interventions() -> None:
     raw_study = {
         "protocolSection": {
             "identificationModule": {"nctId": "NCT_DEDUP_003"},
-            "armsInterventionsModule": {
-                "interventions": [interv, interv]
-            }
+            "armsInterventionsModule": {"interventions": [interv, interv]},
         }
     }
     result = transform_study(raw_study)
