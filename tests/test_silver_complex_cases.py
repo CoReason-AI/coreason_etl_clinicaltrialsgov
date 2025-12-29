@@ -8,7 +8,7 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
 
-from coreason_etl_clinicaltrialsgov.transformers import generate_surrogate_key, transform_study
+from coreason_etl_clinicaltrialsgov.transformers import generate_surrogate_key, parse_date, transform_study
 
 
 def test_surrogate_key_unicode() -> None:
@@ -26,40 +26,15 @@ def test_surrogate_key_unicode() -> None:
 
 def test_surrogate_key_special_chars() -> None:
     """Verify handling of delimiters and special chars in input."""
-    # Our separator is "|". Ensure inputs containing the separator don't cause simple collisions
-    # if we naive concatenation.
-    # Implementation uses: "|".join([parent] + parts)
-
-    # Case A: "A", "B" -> "parent|A|B"
-    # Case B: "A|B" -> "parent|A|B"
-    # Wait, if we just join, "A", "B" becomes "A|B". And "A|B" (single arg) becomes "A|B".
-    # This IS a potential collision if the implementation is naive join.
-    # Let's check the behavior.
-
-    # generate_surrogate_key(parent, *parts)
-
-    # k_split = generate_surrogate_key("NCT", "A", "B") -> "NCT|A|B"
-    # k_joined = generate_surrogate_key("NCT", "A|B") -> "NCT|A|B"
-
-    # If this test fails (they are equal), we might want to consider if that matters.
-    # In practice, fields are "role", "name".
-    # If role="LEAD" and name="John", key is "...|LEAD|John"
-    # If role="LEAD|John" and name=None? unlikely.
-    # But strictly speaking, for a robust system, we might want to escape delimiters?
-    # Or just accept the risk as negligible for this domain.
-    # Let's document behavior with this test.
+    # We now sanitize the input by replacing '|' with '_' to avoid collisions.
+    # Therefore ("A", "B") -> "parent|A|B"
+    # But ("A|B") -> "parent|A_B"
+    # These should NOT collide anymore.
 
     k_split = generate_surrogate_key("NCT", "A", "B")
     k_joined = generate_surrogate_key("NCT", "A|B")
 
-    # If they collide, it's a known limitation. If we want to prevent it, we'd need a better scheme.
-    # For now, let's just assert they ARE equal (documenting current behavior)
-    # OR assert they are NOT equal if we want to force a fix.
-    # Given the user asked for "Complex cases", let's see if they ARE equal.
-    # If they are, we might decide to fix it to be "Correct".
-
-    # Checking strictly:
-    assert k_split == k_joined
+    assert k_split != k_joined
 
 
 def test_duplicate_deduplication_in_transform() -> None:
@@ -122,3 +97,21 @@ def test_null_vs_empty_string_collision() -> None:
     # But let's verify " " (space) differs
     k3 = generate_surrogate_key("NCT", "A", " ")
     assert k1 != k3
+
+
+def test_date_boundary_conditions() -> None:
+    """Test invalid or boundary date formats."""
+    # Valid
+    assert parse_date("2023-01-01") is not None
+
+    # Invalid boundary dates
+    assert parse_date("0000-00-00") is None
+    assert parse_date("9999-99-99") is None
+    assert parse_date("2023-13-01") is None  # Invalid month
+    assert parse_date("2023-00-01") is None  # Invalid month
+    assert parse_date("2023-01-32") is None  # Invalid day
+
+    # Malformed strings
+    assert parse_date("not-a-date") is None
+    assert parse_date("") is None
+    assert parse_date(None) is None
