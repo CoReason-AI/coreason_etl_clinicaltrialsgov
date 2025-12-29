@@ -13,6 +13,7 @@ from typing import Any, Generator
 from unittest.mock import patch
 
 import pytest
+from dlt.extract.items import DataItemWithMeta
 
 from coreason_etl_clinicaltrialsgov.extractors import clinicaltrials_source
 from coreason_etl_clinicaltrialsgov.transformers import (
@@ -150,6 +151,12 @@ def mock_client_class() -> Generator[Any, None, None]:
         yield mock
 
 
+def _extract_data(item: Any) -> Any:
+    while isinstance(item, DataItemWithMeta):
+        item = item.data
+    return item
+
+
 def test_extractor_pagination_gap(mock_client_class: Any) -> None:
     mock_instance = mock_client_class.return_value
 
@@ -164,7 +171,17 @@ def test_extractor_pagination_gap(mock_client_class: Any) -> None:
     items = list(source.resources["studies_stream"])
 
     assert len(items) > 0
-    assert items[0]["source_id"] == "NCT_PAGE2"
+    # Unwrap items
+    items_data = [_extract_data(i) for i in items]
+
+    # We look for the Bronze record or Silver record that contains the source_id
+    # Since we yield multiple records, let's just find one that matches.
+    found = False
+    for d in items_data:
+        if isinstance(d, dict) and d.get("source_id") == "NCT_PAGE2":
+            found = True
+            break
+    assert found
 
 
 def test_extractor_ignores_study_without_nctid(mock_client_class: Any) -> None:
@@ -179,11 +196,12 @@ def test_extractor_ignores_study_without_nctid(mock_client_class: Any) -> None:
 
     source = clinicaltrials_source()
     items = list(source.resources["studies_stream"])
+    items_data = [_extract_data(i) for i in items]
 
     # Should only have records for valid
     nct_ids = set()
-    for item in items:
-        if "source_id" in item:
+    for item in items_data:
+        if isinstance(item, dict) and "source_id" in item:
             nct_ids.add(item["source_id"])
 
     assert "NCT_VALID" in nct_ids

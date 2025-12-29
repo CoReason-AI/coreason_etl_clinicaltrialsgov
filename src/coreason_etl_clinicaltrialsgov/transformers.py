@@ -147,40 +147,47 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
 
     # 2. Silver Sponsors
     silver_sponsors_list = []
+    seen_sponsors = set()
+
     sponsors_module = protocol.get("sponsorCollaboratorsModule", {})
     lead = sponsors_module.get("leadSponsor")
     if lead:
         # Unique ID: nct_id + role + name
         name = lead.get("name")
         s_id = generate_surrogate_key(nct_id, "LEAD", name)
-        silver_sponsors_list.append(
-            SilverSponsor(
-                id=s_id,
-                source_id=nct_id,
-                coreason_id=c_id,
-                name=name,
-                agency_class=lead.get("class"),
-                role="LEAD",
+        if s_id not in seen_sponsors:
+            seen_sponsors.add(s_id)
+            silver_sponsors_list.append(
+                SilverSponsor(
+                    id=s_id,
+                    source_id=nct_id,
+                    coreason_id=c_id,
+                    name=name,
+                    agency_class=lead.get("class"),
+                    role="LEAD",
+                )
             )
-        )
 
     collaborators = sponsors_module.get("collaborators", [])
     for collab in collaborators:
         name = collab.get("name")
         s_id = generate_surrogate_key(nct_id, "COLLABORATOR", name)
-        silver_sponsors_list.append(
-            SilverSponsor(
-                id=s_id,
-                source_id=nct_id,
-                coreason_id=c_id,
-                name=name,
-                agency_class=collab.get("class"),
-                role="COLLABORATOR",
+        if s_id not in seen_sponsors:
+            seen_sponsors.add(s_id)
+            silver_sponsors_list.append(
+                SilverSponsor(
+                    id=s_id,
+                    source_id=nct_id,
+                    coreason_id=c_id,
+                    name=name,
+                    agency_class=collab.get("class"),
+                    role="COLLABORATOR",
+                )
             )
-        )
 
     # 3. Silver Locations
     silver_locations_list = []
+    seen_locations = set()
     locations_module = protocol.get("contactsLocationsModule", {})
     locations = locations_module.get("locations", [])
     for loc in locations:
@@ -197,54 +204,51 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
         # We'll include them all.
         s_id = generate_surrogate_key(nct_id, facility, city, state, country)
 
-        silver_locations_list.append(
-            SilverLocation(
-                id=s_id,
-                source_id=nct_id,
-                coreason_id=c_id,
-                facility=facility,
-                city=city,
-                state=state,
-                zip=loc.get("zip"),
-                country=country,
-                status=loc.get("status"),
-                geo_point=loc.get("geoPoint"),
+        if s_id not in seen_locations:
+            seen_locations.add(s_id)
+            silver_locations_list.append(
+                SilverLocation(
+                    id=s_id,
+                    source_id=nct_id,
+                    coreason_id=c_id,
+                    facility=facility,
+                    city=city,
+                    state=state,
+                    zip=loc.get("zip"),
+                    country=country,
+                    status=loc.get("status"),
+                    geo_point=loc.get("geoPoint"),
+                )
             )
-        )
 
     # 4. Silver Interventions
     silver_interventions_list = []
+    seen_interventions = set()
     arms_module = protocol.get("armsInterventionsModule", {})
     interventions = arms_module.get("interventions", [])
     for interv in interventions:
         # ID: nct_id + type + name
         i_type = interv.get("type")
         i_name = interv.get("name")
-        # Description might be long, but maybe needed for uniqueness?
-        # Let's start with type + name.
-        # What if duplicate type+name?
-        # e.g. "Drug: Placebo" twice?
-        # If identical content, we WANT to merge them into one record? Or keep both?
-        # Usually distinct records in source implies distinctness.
-        # But if they are identical, storing twice is redundant unless order matters.
-        # Pipeline "merge" disposition implies Set semantics.
-        # If we have two identical interventions, merging them to one is probably correct/acceptable.
         s_id = generate_surrogate_key(nct_id, i_type, i_name)
 
-        silver_interventions_list.append(
-            SilverIntervention(
-                id=s_id,
-                source_id=nct_id,
-                coreason_id=c_id,
-                type=i_type,
-                name=i_name,
-                description=interv.get("description"),
-                other_names=interv.get("otherNames", []),
+        if s_id not in seen_interventions:
+            seen_interventions.add(s_id)
+            silver_interventions_list.append(
+                SilverIntervention(
+                    id=s_id,
+                    source_id=nct_id,
+                    coreason_id=c_id,
+                    type=i_type,
+                    name=i_name,
+                    description=interv.get("description"),
+                    other_names=interv.get("otherNames", []),
+                )
             )
-        )
 
     # 5. Silver Outcomes
     silver_outcomes_list = []
+    seen_outcomes = set()
     outcomes_module = protocol.get("outcomesModule", {})
     for outcome_type in ["primaryOutcomes", "secondaryOutcomes", "otherOutcomes"]:
         outcomes = outcomes_module.get(outcome_type, [])
@@ -255,20 +259,23 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
             time_frame = out.get("timeFrame")
             s_id = generate_surrogate_key(nct_id, normalized_type, measure, time_frame)
 
-            silver_outcomes_list.append(
-                SilverOutcome(
-                    id=s_id,
-                    source_id=nct_id,
-                    coreason_id=c_id,
-                    outcome_type=normalized_type,
-                    measure=measure,
-                    description=out.get("description"),
-                    time_frame=time_frame,
+            if s_id not in seen_outcomes:
+                seen_outcomes.add(s_id)
+                silver_outcomes_list.append(
+                    SilverOutcome(
+                        id=s_id,
+                        source_id=nct_id,
+                        coreason_id=c_id,
+                        outcome_type=normalized_type,
+                        measure=measure,
+                        description=out.get("description"),
+                        time_frame=time_frame,
+                    )
                 )
-            )
 
     # 6. Silver References
     silver_references_list = []
+    seen_references = set()
     refs_module = protocol.get("referencesModule", {})
 
     refs = refs_module.get("references", [])
@@ -278,17 +285,19 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
         citation = ref.get("citation")
         s_id = generate_surrogate_key(nct_id, "REFERENCE", pmid, citation)
 
-        silver_references_list.append(
-            SilverReference(
-                id=s_id,
-                source_id=nct_id,
-                coreason_id=c_id,
-                type="REFERENCE",
-                pmid=pmid,
-                citation=citation,
-                retraction=ref.get("retraction"),
+        if s_id not in seen_references:
+            seen_references.add(s_id)
+            silver_references_list.append(
+                SilverReference(
+                    id=s_id,
+                    source_id=nct_id,
+                    coreason_id=c_id,
+                    type="REFERENCE",
+                    pmid=pmid,
+                    citation=citation,
+                    retraction=ref.get("retraction"),
+                )
             )
-        )
 
     return {
         "silver_studies": [silver_study_model.model_dump()],
