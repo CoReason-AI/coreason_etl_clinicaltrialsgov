@@ -49,10 +49,6 @@ def normalize_age(age_str: Optional[str]) -> Optional[float]:
 
     parts = age_str.strip().lower().split()
     if not parts or len(parts) < 2:
-        # Try to parse just the number if no unit, assume years? Or return None?
-        # Example "18 Years".
-        # If just "18", return 18.0? The spec examples usually have units.
-        # Let's be safe and try to parse the first part as float if possible.
         try:
             return float(parts[0])
         except (ValueError, IndexError):
@@ -72,14 +68,22 @@ def normalize_age(age_str: Optional[str]) -> Optional[float]:
         return value / 365
     elif "year" in unit:
         return value
-    # Hour/Minute? Unlikely for clinical trials eligibility, but treat as 0 or None?
-    return value  # Default to value if unit unknown? Or years?
+    return value
 
 
 def generate_coreason_id(nct_id: str, first_received_date: Optional[str]) -> str:
-    """Generate deterministic UUID."""
-    # coreason_id: uuid5(uuid.NAMESPACE_DNS, "clinicaltrials.gov/" + nctId + "/" + firstReceivedDate)
+    """Generate deterministic UUID for study."""
     seed = f"clinicaltrials.gov/{nct_id}/{first_received_date or ''}"
+    return str(uuid.uuid5(uuid.NAMESPACE_DNS, seed))
+
+
+def generate_surrogate_key(parent_id: str, *parts: str | None) -> str:
+    """Generate deterministic UUID for child records."""
+    # Concatenate all parts to form a unique seed for this record
+    seed_parts = [parent_id]
+    for p in parts:
+        seed_parts.append(p or "")
+    seed = "|".join(seed_parts)
     return str(uuid.uuid5(uuid.NAMESPACE_DNS, seed))
 
 
@@ -116,7 +120,6 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
 
     nct_id = ident.get("nctId")
     if not nct_id:
-        # Should not happen for valid records, but handle gracefully
         return {}
 
     first_received = status.get("studyFirstPostDateStruct", {}).get("date")
@@ -147,11 +150,15 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
     sponsors_module = protocol.get("sponsorCollaboratorsModule", {})
     lead = sponsors_module.get("leadSponsor")
     if lead:
+        # Unique ID: nct_id + role + name
+        name = lead.get("name")
+        s_id = generate_surrogate_key(nct_id, "LEAD", name)
         silver_sponsors_list.append(
             SilverSponsor(
+                id=s_id,
                 source_id=nct_id,
                 coreason_id=c_id,
-                name=lead.get("name"),
+                name=name,
                 agency_class=lead.get("class"),
                 role="LEAD",
             )
@@ -159,11 +166,14 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
 
     collaborators = sponsors_module.get("collaborators", [])
     for collab in collaborators:
+        name = collab.get("name")
+        s_id = generate_surrogate_key(nct_id, "COLLABORATOR", name)
         silver_sponsors_list.append(
             SilverSponsor(
+                id=s_id,
                 source_id=nct_id,
                 coreason_id=c_id,
-                name=collab.get("name"),
+                name=name,
                 agency_class=collab.get("class"),
                 role="COLLABORATOR",
             )
@@ -174,15 +184,29 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
     locations_module = protocol.get("contactsLocationsModule", {})
     locations = locations_module.get("locations", [])
     for loc in locations:
+        # Unique ID: nct_id + facility + city + country
+        # Note: multiple locations could have same facility name? Hopefully distinct enough.
+        # Adding geo_point? Maybe not stable if float.
+        # Let's use facility, city, state, country.
+        facility = loc.get("facility")
+        city = loc.get("city")
+        state = loc.get("state")
+        country = loc.get("country")
+
+        # If all are None, this might duplicate? But locations usually have some info.
+        # We'll include them all.
+        s_id = generate_surrogate_key(nct_id, facility, city, state, country)
+
         silver_locations_list.append(
             SilverLocation(
+                id=s_id,
                 source_id=nct_id,
                 coreason_id=c_id,
-                facility=loc.get("facility"),
-                city=loc.get("city"),
-                state=loc.get("state"),
+                facility=facility,
+                city=city,
+                state=state,
                 zip=loc.get("zip"),
-                country=loc.get("country"),
+                country=country,
                 status=loc.get("status"),
                 geo_point=loc.get("geoPoint"),
             )
@@ -193,12 +217,27 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
     arms_module = protocol.get("armsInterventionsModule", {})
     interventions = arms_module.get("interventions", [])
     for interv in interventions:
+        # ID: nct_id + type + name
+        i_type = interv.get("type")
+        i_name = interv.get("name")
+        # Description might be long, but maybe needed for uniqueness?
+        # Let's start with type + name.
+        # What if duplicate type+name?
+        # e.g. "Drug: Placebo" twice?
+        # If identical content, we WANT to merge them into one record? Or keep both?
+        # Usually distinct records in source implies distinctness.
+        # But if they are identical, storing twice is redundant unless order matters.
+        # Pipeline "merge" disposition implies Set semantics.
+        # If we have two identical interventions, merging them to one is probably correct/acceptable.
+        s_id = generate_surrogate_key(nct_id, i_type, i_name)
+
         silver_interventions_list.append(
             SilverIntervention(
+                id=s_id,
                 source_id=nct_id,
                 coreason_id=c_id,
-                type=interv.get("type"),
-                name=interv.get("name"),
+                type=i_type,
+                name=i_name,
                 description=interv.get("description"),
                 other_names=interv.get("otherNames", []),
             )
@@ -209,15 +248,22 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
     outcomes_module = protocol.get("outcomesModule", {})
     for outcome_type in ["primaryOutcomes", "secondaryOutcomes", "otherOutcomes"]:
         outcomes = outcomes_module.get(outcome_type, [])
+        normalized_type = outcome_type.replace("Outcomes", "").upper()
         for out in outcomes:
+            # ID: nct_id + type + measure + time_frame
+            measure = out.get("measure")
+            time_frame = out.get("timeFrame")
+            s_id = generate_surrogate_key(nct_id, normalized_type, measure, time_frame)
+
             silver_outcomes_list.append(
                 SilverOutcome(
+                    id=s_id,
                     source_id=nct_id,
                     coreason_id=c_id,
-                    outcome_type=outcome_type.replace("Outcomes", "").upper(),
-                    measure=out.get("measure"),
+                    outcome_type=normalized_type,
+                    measure=measure,
                     description=out.get("description"),
-                    time_frame=out.get("timeFrame"),
+                    time_frame=time_frame,
                 )
             )
 
@@ -227,13 +273,19 @@ def transform_study(raw_study: dict[str, Any]) -> dict[str, list[dict[str, Any]]
 
     refs = refs_module.get("references", [])
     for ref in refs:
+        # ID: nct_id + pmid + citation
+        pmid = ref.get("pmid")
+        citation = ref.get("citation")
+        s_id = generate_surrogate_key(nct_id, "REFERENCE", pmid, citation)
+
         silver_references_list.append(
             SilverReference(
+                id=s_id,
                 source_id=nct_id,
                 coreason_id=c_id,
                 type="REFERENCE",
-                pmid=ref.get("pmid"),
-                citation=ref.get("citation"),
+                pmid=pmid,
+                citation=citation,
                 retraction=ref.get("retraction"),
             )
         )
