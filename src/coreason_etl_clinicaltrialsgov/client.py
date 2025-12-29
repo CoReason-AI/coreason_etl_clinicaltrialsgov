@@ -32,7 +32,10 @@ class wait_for_retry_after(wait_base):
             if retry_after:
                 try:
                     # Try parsing as integer seconds
-                    return float(retry_after)
+                    seconds = float(retry_after)
+                    if seconds >= 0:
+                        return seconds
+                    # Negative seconds are invalid per RFC; fall through to fallback
                 except ValueError:
                     # Try parsing as HTTP Date
                     try:
@@ -48,6 +51,8 @@ class wait_for_retry_after(wait_base):
                             wait_seconds = (parsed_date - now).total_seconds()
                             if wait_seconds > 0:
                                 return wait_seconds
+                            # If date is in the past, return 0.0 (immediate retry)
+                            return 0.0
                     except Exception as e:
                         logger.warning(f"Failed to parse Retry-After header '{retry_after}': {e}")
 
