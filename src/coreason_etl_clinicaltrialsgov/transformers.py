@@ -85,7 +85,10 @@ def generate_surrogate_key(parent_id: str, *parts: str | int | None) -> str:
         if p is None:
             seed_parts.append("")
         else:
-            seed_parts.append(str(p))
+            # Replace the delimiter in the input to prevent injection/collisions
+            # We replace '|' with '_' (underscore) as a safe fallback
+            sanitized = str(p).replace("|", "_")
+            seed_parts.append(sanitized)
     seed = "|".join(seed_parts)
     return str(uuid.uuid5(uuid.NAMESPACE_DNS, seed))
 
