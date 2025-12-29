@@ -19,7 +19,10 @@ from tenacity.wait import wait_base
 
 
 class wait_for_retry_after(wait_base):
-    """Wait strategy that respects the Retry-After header."""
+    """Wait strategy that respects the Retry-After header.
+
+    Supports both integer seconds and HTTP Date formats (RFC 1123).
+    """
 
     def __init__(self, fallback: wait_base) -> None:
         self.fallback = fallback
