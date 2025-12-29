@@ -75,13 +75,22 @@ def clinicaltrials_source(page_size: int = 100, query_term: Optional[str] = None
             for table_name, records in silver_data.items():
                 if records:
                     for record in records:
-                        yield dlt.mark.with_table_name(record, table_name)
+                        if table_name == "silver_studies":
+                            # Use source_id as PK (default for resource)
+                            yield dlt.mark.with_table_name(record, table_name)
+                        else:
+                            # Use new 'id' as PK for 1:N tables
+                            yield dlt.mark.with_hints(
+                                dlt.mark.with_table_name(record, table_name),
+                                dlt.mark.make_hints(primary_key="id"),
+                            )
 
             # 3. Gold Layer
             if silver_study_record:
                 locations = silver_data.get("silver_locations", [])
                 gold_record = transform_gold(raw_study, silver_study_record, locations)
                 if gold_record:
+                    # Gold uses source_id (NCT ID) as PK
                     yield dlt.mark.with_table_name(gold_record, "gold_studies")
 
         # Save the new high water mark

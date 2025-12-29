@@ -8,10 +8,11 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
 
-from typing import Generator
+from typing import Any, Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
+from dlt.extract.items import DataItemWithMeta
 
 from coreason_etl_clinicaltrialsgov.extractors import clinicaltrials_source
 
@@ -69,29 +70,30 @@ def test_studies_generator_flow(
     # Expected items:
     # 1. Bronze record (dict with table name mark)
     # 2. Silver study
-    # 3. Silver locations
+    # 3. Silver locations (wrapped in hints now)
     # 4. Gold record
 
-    # dlt resources yield TDataItems which can be dicts or lists of dicts
-    # Verify we got items
-    assert len(items) >= 3
+    # Helper to extract data from potentially nested DataItemWithMeta wrappers
+    def extract_data(item: Any) -> Any:
+        while isinstance(item, DataItemWithMeta):
+            item = item.data
+        return item
+
+    unwrapped_items = [extract_data(i) for i in items]
 
     # Check Bronze
-    # Note: accessing yielded items from dlt resource directly might require handling DltResource specifics,
-    # but for a generator resource, iterating it yields the data items.
-
-    bronze = next(i for i in items if isinstance(i, dict) and i.get("raw_payload") == raw_study)
+    bronze = next(i for i in unwrapped_items if isinstance(i, dict) and i.get("raw_payload") == raw_study)
     assert bronze["source_id"] == "NCT001"
 
     # Check Silver
-    silver_study = next(i for i in items if isinstance(i, dict) and i.get("overall_status") == "RECRUITING")
+    silver_study = next(i for i in unwrapped_items if isinstance(i, dict) and i.get("overall_status") == "RECRUITING")
     assert silver_study["source_id"] == "NCT001"
 
-    silver_loc = next(i for i in items if isinstance(i, dict) and i.get("city") == "Boston")
+    silver_loc = next(i for i in unwrapped_items if isinstance(i, dict) and i.get("city") == "Boston")
     assert silver_loc is not None
 
     # Check Gold
-    gold = next(i for i in items if isinstance(i, dict) and i.get("gold_field") == "val")
+    gold = next(i for i in unwrapped_items if isinstance(i, dict) and i.get("gold_field") == "val")
     assert gold is not None
 
 
@@ -125,11 +127,16 @@ def test_studies_generator_gold_skip(
     resource = source.resources["studies_stream"]
     items = list(resource)
 
+    # Helper to extract data
+    def extract_data(item: Any) -> Any:
+        while isinstance(item, DataItemWithMeta):
+            item = item.data
+        return item
+
+    unwrapped = [extract_data(i) for i in items]
+
     # Should contain Bronze + Silver, but no Gold
-    assert any(i.get("source_id") == "NCT001" for i in items)
-    # No item with table name 'gold_studies' logic check is hard without checking dlt marks,
-    # but we can check the return values.
-    # Since we mocked transform_gold to return None, the generator logic `if gold_record: yield` won't yield it.
+    assert any(i.get("source_id") == "NCT001" for i in unwrapped if isinstance(i, dict))
 
     # Verify mock call
     mock_transform_gold.assert_called_once()
