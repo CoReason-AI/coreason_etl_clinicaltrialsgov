@@ -15,7 +15,6 @@ import pytest
 
 from coreason_etl_clinicaltrialsgov.transformers import normalize_age, parse_date, transform_study
 
-
 # --- Date Parsing Tests ---
 
 
@@ -95,7 +94,7 @@ def test_transform_study_deduplicate_sponsors() -> None:
     # Expect: 1 Lead (Pharma Corp) + 1 Lab A + 1 Lab B = 3 total
     assert len(sponsors) == 3
 
-    names = sorted([s["name"] for s in sponsors])  # type: ignore
+    names = sorted([s["name"] for s in sponsors])
     assert names == ["Lab A", "Lab B", "Pharma Corp"]
 
 
@@ -132,7 +131,7 @@ def test_transform_study_deduplicate_locations() -> None:
     # Expect: Hospital A (deduped) + Hospital B = 2 total
     assert len(locations) == 2
 
-    facilities = sorted([loc["facility"] for loc in locations])  # type: ignore
+    facilities = sorted([loc["facility"] for loc in locations])
     assert facilities == ["Hospital A", "Hospital B"]
 
 
@@ -155,7 +154,7 @@ def test_transform_study_deduplicate_interventions() -> None:
     interventions = result["silver_interventions"]
 
     assert len(interventions) == 2
-    names = sorted([i["name"] for i in interventions])  # type: ignore
+    names = sorted([i["name"] for i in interventions])
     assert names == ["Aspirin", "Stent"]
 
 
@@ -178,5 +177,5 @@ def test_transform_study_deduplicate_outcomes() -> None:
     outcomes = result["silver_outcomes"]
 
     assert len(outcomes) == 2
-    measures = sorted([o["measure"] for o in outcomes])  # type: ignore
+    measures = sorted([o["measure"] for o in outcomes])
     assert measures == ["Pain", "Survival"]
