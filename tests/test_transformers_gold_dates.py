@@ -12,6 +12,7 @@ from datetime import date
 from typing import Any
 
 import pytest
+
 from coreason_etl_clinicaltrialsgov.transformers import transform_gold
 
 
