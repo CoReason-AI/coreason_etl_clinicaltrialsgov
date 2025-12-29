@@ -36,6 +36,7 @@ class SilverStudy(BaseModel):
 
 
 class SilverSponsor(BaseModel):
+    id: str
     source_id: str
     coreason_id: str
     name: Optional[str] = None
@@ -46,6 +47,7 @@ class SilverSponsor(BaseModel):
 
 
 class SilverLocation(BaseModel):
+    id: str
     source_id: str
     coreason_id: str
     facility: Optional[str] = None
@@ -60,6 +62,7 @@ class SilverLocation(BaseModel):
 
 
 class SilverIntervention(BaseModel):
+    id: str
     source_id: str
     coreason_id: str
     type: Optional[str] = None
@@ -71,6 +74,7 @@ class SilverIntervention(BaseModel):
 
 
 class SilverOutcome(BaseModel):
+    id: str
     source_id: str
     coreason_id: str
     outcome_type: str
@@ -82,6 +86,7 @@ class SilverOutcome(BaseModel):
 
 
 class SilverReference(BaseModel):
+    id: str
     source_id: str
     coreason_id: str
     type: str
