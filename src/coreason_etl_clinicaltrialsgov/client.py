@@ -19,7 +19,10 @@ from tenacity.wait import wait_base
 
 
 class wait_for_retry_after(wait_base):
-    """Wait strategy that respects the Retry-After header."""
+    """Wait strategy that respects the Retry-After header.
+
+    Supports both integer seconds and HTTP Date formats (RFC 1123).
+    """
 
     def __init__(self, fallback: wait_base) -> None:
         self.fallback = fallback
@@ -30,34 +33,40 @@ class wait_for_retry_after(wait_base):
         if isinstance(exc, requests.HTTPError) and exc.response is not None and exc.response.status_code == 429:
             retry_after = exc.response.headers.get("Retry-After")
             if retry_after:
-                try:
-                    # Try parsing as integer seconds
-                    seconds = float(retry_after)
-                    if seconds >= 0:
-                        return seconds
-                    # Negative seconds are invalid per RFC; fall through to fallback
-                except ValueError:
-                    # Try parsing as HTTP Date
-                    try:
-                        parsed_date = email.utils.parsedate_to_datetime(retry_after)
-                        if parsed_date:
-                            now = datetime.now(timezone.utc)
-                            # Ensure both are offset-aware or convert if needed
-                            if parsed_date.tzinfo is None:
-                                # Assume GMT/UTC if not specified in parsing
-                                # (parsedate_to_datetime handles this usually)
-                                parsed_date = parsed_date.replace(tzinfo=timezone.utc)
-
-                            wait_seconds = (parsed_date - now).total_seconds()
-                            if wait_seconds > 0:
-                                return wait_seconds
-                            # If date is in the past, return 0.0 (immediate retry)
-                            return 0.0
-                    except Exception as e:
-                        logger.warning(f"Failed to parse Retry-After header '{retry_after}': {e}")
+                wait = self._parse_header(retry_after)
+                if wait is not None:
+                    return wait
 
         # Fallback to the default strategy
         return self.fallback(retry_state)
+
+    def _parse_header(self, retry_after: str) -> Optional[float]:
+        try:
+            # Try parsing as integer seconds
+            seconds = float(retry_after)
+            if seconds >= 0:
+                return seconds
+            # Negative seconds are invalid per RFC; fall through to fallback
+        except ValueError:
+            # Try parsing as HTTP Date
+            try:
+                parsed_date = email.utils.parsedate_to_datetime(retry_after)
+                if parsed_date:
+                    now = datetime.now(timezone.utc)
+                    # Ensure both are offset-aware or convert if needed
+                    if parsed_date.tzinfo is None:
+                        # Assume GMT/UTC if not specified in parsing
+                        # (parsedate_to_datetime handles this usually)
+                        parsed_date = parsed_date.replace(tzinfo=timezone.utc)
+
+                    wait_seconds = (parsed_date - now).total_seconds()
+                    if wait_seconds > 0:
+                        return wait_seconds
+                    # If date is in the past, return 0.0 (immediate retry)
+                    return 0.0
+            except Exception as e:
+                logger.warning(f"Failed to parse Retry-After header '{retry_after}': {e}")
+        return None
 
 
 class ClinicalTrialsClient:
