@@ -25,16 +25,8 @@ def test_unicode_robustness() -> None:
 
     raw: dict[str, Any] = {
         "protocolSection": {
-            "identificationModule": {
-                "nctId": "NCT_UNICODE",
-                "briefTitle": nasty_string
-            },
-            "sponsorCollaboratorsModule": {
-                "leadSponsor": {
-                    "name": "Sponsor 🚀",
-                    "class": "INDUSTRY"
-                }
-            }
+            "identificationModule": {"nctId": "NCT_UNICODE", "briefTitle": nasty_string},
+            "sponsorCollaboratorsModule": {"leadSponsor": {"name": "Sponsor 🚀", "class": "INDUSTRY"}},
         }
     }
 
@@ -110,9 +102,9 @@ def test_deduplication_exact_match() -> None:
             "sponsorCollaboratorsModule": {
                 "collaborators": [
                     {"name": "Same Guy", "class": "OTHER"},
-                    {"name": "Same Guy", "class": "OTHER"}, # Exact duplicate
+                    {"name": "Same Guy", "class": "OTHER"},  # Exact duplicate
                 ]
-            }
+            },
         }
     }
 
@@ -142,9 +134,9 @@ def test_deduplication_collision_avoidance() -> None:
             "sponsorCollaboratorsModule": {
                 "collaborators": [
                     {"name": "Same Guy", "class": "OTHER"},
-                    {"name": "Same Guy", "class": "INDUSTRY"}, # Different class, but same key!
+                    {"name": "Same Guy", "class": "INDUSTRY"},  # Different class, but same key!
                 ]
-            }
+            },
         }
     }
 
