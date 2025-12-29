@@ -73,7 +73,7 @@ def test_duplicate_deduplication_in_transform() -> None:
                     {"name": "Same Lab", "class": "OTHER"},
                     {"name": "Same Lab", "class": "OTHER"},
                 ]
-            }
+            },
         }
     }
 
@@ -98,16 +98,12 @@ def test_large_list_performance() -> None:
     # Create 1000 locations
     locations = []
     for i in range(1000):
-        locations.append({
-            "facility": f"Facility {i}",
-            "city": "City",
-            "country": "Country"
-        })
+        locations.append({"facility": f"Facility {i}", "city": "City", "country": "Country"})
 
     raw_study = {
         "protocolSection": {
             "identificationModule": {"nctId": "NCT_LARGE"},
-            "contactsLocationsModule": {"locations": locations}
+            "contactsLocationsModule": {"locations": locations},
         }
     }
 
