@@ -43,7 +43,10 @@ def parse_date(date_str: Optional[str]) -> Optional[date]:
 
 
 def normalize_age(age_str: Optional[str]) -> Optional[float]:
-    """Normalize age string to years (float)."""
+    """Normalize age string to years (float).
+
+    Handles 'Months', 'Weeks', 'Days' by converting to fractional years.
+    """
     if not age_str:
         return None
 
@@ -61,11 +64,11 @@ def normalize_age(age_str: Optional[str]) -> Optional[float]:
 
     unit = parts[1]
     if "month" in unit:
-        return value / 12
+        return value / 12.0
     elif "week" in unit:
-        return value / 52
+        return value / 52.0
     elif "day" in unit:
-        return value / 365
+        return value / 365.0
     elif "year" in unit:
         return value
     return value
