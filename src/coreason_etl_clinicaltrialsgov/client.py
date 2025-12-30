@@ -16,6 +16,7 @@ import requests
 from tenacity import RetryCallState, retry, stop_after_attempt, wait_exponential
 from tenacity.wait import wait_base
 
+from coreason_etl_clinicaltrialsgov.config import settings
 from coreason_etl_clinicaltrialsgov.utils.logger import logger
 
 
@@ -84,34 +85,37 @@ class ClinicalTrialsClient:
         self.session = session or requests.Session()
 
     @retry(
-        stop=stop_after_attempt(5),
-        wait=wait_for_retry_after(fallback=wait_exponential(multiplier=1, min=4, max=10)),
+        stop=stop_after_attempt(settings.API_MAX_RETRIES),
+        wait=wait_for_retry_after(
+            fallback=wait_exponential(multiplier=1, min=settings.API_RETRY_MIN_WAIT, max=settings.API_RETRY_MAX_WAIT)
+        ),
         reraise=True,
     )
     def fetch_studies(
         self,
         page_token: Optional[str] = None,
-        page_size: int = 100,
+        page_size: Optional[int] = None,
         query_term: Optional[str] = None,
     ) -> dict[str, Any]:
         """Fetch a single page of studies.
 
         Args:
             page_token: Cursor for the next page.
-            page_size: Number of records to return.
+            page_size: Number of records to return. Defaults to settings.API_PAGE_SIZE.
             query_term: Optional query term for filtering.
 
         Returns:
             The JSON response body.
         """
-        params: dict[str, str | int] = {"pageSize": page_size}
+        actual_page_size = page_size if page_size is not None else settings.API_PAGE_SIZE
+        params: dict[str, str | int] = {"pageSize": actual_page_size}
         if page_token:
             params["pageToken"] = page_token
         if query_term:
             params["query.term"] = query_term
 
         try:
-            response = self.session.get(self.BASE_URL, params=params, timeout=30)
+            response = self.session.get(self.BASE_URL, params=params, timeout=settings.API_TIMEOUT)
             response.raise_for_status()
             return cast(dict[str, Any], response.json())
         except requests.HTTPError as e:
