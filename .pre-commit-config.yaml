@@ -22,6 +22,7 @@ repos:
           - dlt
           - tenacity
           - pydantic
+          - pydantic-settings
           - pytest
           - loguru
   - repo: https://github.com/AleksaC/hadolint-py
