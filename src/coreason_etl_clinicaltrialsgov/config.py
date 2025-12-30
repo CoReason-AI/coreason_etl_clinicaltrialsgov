@@ -33,7 +33,7 @@ class AppSettings(BaseSettings):
         env_prefix="CLINICALTRIALS_",
         env_file=".env",
         env_file_encoding="utf-8",
-        case_sensitive=True,  # Env vars are case sensitive
+        case_sensitive=False,
     )
 
 

@@ -55,18 +55,16 @@ def test_invalid_log_level(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_case_sensitivity(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test that env vars matching is case-sensitive for the prefix."""
-    # When case_sensitive=True, the env var must match exactly (CLINICALTRIALS_...)
-    # We test that lowercase prefix is IGNORED.
+    """Test that env vars matching is case-insensitive."""
+    # When case_sensitive=False (default), lowercase env vars should work
     monkeypatch.setenv("clinicaltrials_log_level", "DEBUG")
     s = AppSettings()
-    # Should remain default (INFO) because lowercase prefix doesn't match
-    assert s.LOG_LEVEL == "INFO"
+    assert s.LOG_LEVEL == "DEBUG"
 
-    # Now set correct upper case
-    monkeypatch.setenv("CLINICALTRIALS_LOG_LEVEL", "DEBUG")
+    # Uppercase should also work
+    monkeypatch.setenv("CLINICALTRIALS_LOG_LEVEL", "WARNING")
     s2 = AppSettings()
-    assert s2.LOG_LEVEL == "DEBUG"
+    assert s2.LOG_LEVEL == "WARNING"
 
 
 def test_dotenv_loading_tmp(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
