@@ -15,7 +15,7 @@ from coreason_etl_clinicaltrialsgov.extractors import clinicaltrials_source
 from coreason_etl_clinicaltrialsgov.utils.logger import logger
 
 
-@logger.catch  # type: ignore
+@logger.catch
 def run_pipeline() -> None:
     """Run the ClinicalTrials.gov ETL pipeline."""
 
