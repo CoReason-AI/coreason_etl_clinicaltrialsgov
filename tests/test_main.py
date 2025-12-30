@@ -8,27 +8,77 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
 
-from typing import Any
 from unittest.mock import MagicMock, patch
 
-from coreason_etl_clinicaltrialsgov.main import run_pipeline
+from typer.testing import CliRunner
+
+from coreason_etl_clinicaltrialsgov.main import app
+
+runner = CliRunner()
 
 
 @patch("coreason_etl_clinicaltrialsgov.main.dlt.pipeline")
 @patch("coreason_etl_clinicaltrialsgov.main.clinicaltrials_source")
-def test_run_pipeline(mock_source: Any, mock_pipeline: Any) -> None:
-    # Setup mocks
+def test_run_command_defaults(mock_source: MagicMock, mock_pipeline: MagicMock) -> None:
+    """Test running the CLI with default arguments."""
     pipeline_instance = MagicMock()
     mock_pipeline.return_value = pipeline_instance
     pipeline_instance.run.return_value = "LoadInfo"
-
     mock_source.return_value = "Source"
 
-    run_pipeline()
+    result = runner.invoke(app, ["run"])
 
-    # Verify calls
+    assert result.exit_code == 0
     mock_pipeline.assert_called_once_with(
-        pipeline_name="clinicaltrials_etl", destination="postgres", dataset_name="clinical_trials_data", progress="log"
+        pipeline_name="clinicaltrials_etl",
+        destination="postgres",
+        dataset_name="clinical_trials_data",
+        progress="log",
     )
-    mock_source.assert_called_once()
+    mock_source.assert_called_once_with(page_size=100, query_term=None)
     pipeline_instance.run.assert_called_once_with("Source")
+
+
+@patch("coreason_etl_clinicaltrialsgov.main.dlt.pipeline")
+@patch("coreason_etl_clinicaltrialsgov.main.clinicaltrials_source")
+def test_run_command_custom_args(mock_source: MagicMock, mock_pipeline: MagicMock) -> None:
+    """Test running the CLI with custom arguments."""
+    pipeline_instance = MagicMock()
+    mock_pipeline.return_value = pipeline_instance
+    pipeline_instance.run.return_value = "LoadInfo"
+    mock_source.return_value = "Source"
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--page-size",
+            "50",
+            "--query-term",
+            "heart attack",
+            "--destination",
+            "duckdb",
+            "--pipeline-name",
+            "custom_pipe",
+            "--dataset-name",
+            "custom_ds",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_pipeline.assert_called_once_with(
+        pipeline_name="custom_pipe", destination="duckdb", dataset_name="custom_ds", progress="log"
+    )
+    mock_source.assert_called_once_with(page_size=50, query_term="heart attack")
+    pipeline_instance.run.assert_called_once_with("Source")
+
+
+@patch("coreason_etl_clinicaltrialsgov.main.dlt.pipeline")
+def test_run_command_failure(mock_pipeline: MagicMock) -> None:
+    """Test that the CLI exits with 1 on exception."""
+    mock_pipeline.side_effect = Exception("Boom")
+
+    result = runner.invoke(app, ["run"])
+
+    assert result.exit_code == 1
+    # Verify strict error handling is logged (covered by logger.exception but nice to check exit code)
