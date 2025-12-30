@@ -36,27 +36,27 @@ def test_surrogate_key_ignore_non_identifying_fields_interventions() -> None:
             "identificationModule": {"nctId": "NCT_ID_STABILITY"},
             "armsInterventionsModule": {
                 "interventions": [
-                    {
-                        "type": "DRUG",
-                        "name": "Drug A",
-                        "description": "Original Description",
-                        "otherNames": ["Alias 1"]
-                    }
+                    {"type": "DRUG", "name": "Drug A", "description": "Original Description", "otherNames": ["Alias 1"]}
                 ]
-            }
+            },
         }
     }
 
     # Run first transform
     result1 = transform_study(base_raw)
+    # The result contains list of dicts. We assert it's a list first.
+    assert isinstance(result1["silver_interventions"], list)
     id1 = result1["silver_interventions"][0]["id"]
 
     # Modify description and otherNames (non-identifying fields)
-    base_raw["protocolSection"]["armsInterventionsModule"]["interventions"][0]["description"] = "New Description"
-    base_raw["protocolSection"]["armsInterventionsModule"]["interventions"][0]["otherNames"] = ["Alias 2"]
+    # We must help mypy know this structure is mutable and has these keys
+    interventions = base_raw["protocolSection"]["armsInterventionsModule"]["interventions"]  # type: ignore
+    interventions[0]["description"] = "New Description"
+    interventions[0]["otherNames"] = ["Alias 2"]
 
     # Run second transform
     result2 = transform_study(base_raw)
+    assert isinstance(result2["silver_interventions"], list)
     id2 = result2["silver_interventions"][0]["id"]
 
     # IDs should match because Business Key is (nct_id + type + name)
@@ -74,25 +74,24 @@ def test_surrogate_key_ignore_non_identifying_fields_outcomes() -> None:
             "identificationModule": {"nctId": "NCT_ID_STABILITY_OUT"},
             "outcomesModule": {
                 "primaryOutcomes": [
-                    {
-                        "measure": "Survival",
-                        "timeFrame": "1 year",
-                        "description": "Original Description"
-                    }
+                    {"measure": "Survival", "timeFrame": "1 year", "description": "Original Description"}
                 ]
-            }
+            },
         }
     }
 
     # Run first transform
     result1 = transform_study(base_raw)
+    assert isinstance(result1["silver_outcomes"], list)
     id1 = result1["silver_outcomes"][0]["id"]
 
     # Modify description
-    base_raw["protocolSection"]["outcomesModule"]["primaryOutcomes"][0]["description"] = "New Description"
+    outcomes = base_raw["protocolSection"]["outcomesModule"]["primaryOutcomes"]  # type: ignore
+    outcomes[0]["description"] = "New Description"
 
     # Run second transform
     result2 = transform_study(base_raw)
+    assert isinstance(result2["silver_outcomes"], list)
     id2 = result2["silver_outcomes"][0]["id"]
 
     # IDs should match because Business Key is (nct_id + type + measure + time_frame)
@@ -113,23 +112,26 @@ def test_surrogate_key_ignore_non_identifying_fields_locations() -> None:
                         "state": "MA",
                         "country": "USA",
                         "zip": "02114",
-                        "status": "RECRUITING"
+                        "status": "RECRUITING",
                     }
                 ]
-            }
+            },
         }
     }
 
     # Run first transform
     result1 = transform_study(base_raw)
+    assert isinstance(result1["silver_locations"], list)
     id1 = result1["silver_locations"][0]["id"]
 
     # Modify status and zip
-    base_raw["protocolSection"]["contactsLocationsModule"]["locations"][0]["status"] = "COMPLETED"
-    base_raw["protocolSection"]["contactsLocationsModule"]["locations"][0]["zip"] = "99999"
+    locations = base_raw["protocolSection"]["contactsLocationsModule"]["locations"]  # type: ignore
+    locations[0]["status"] = "COMPLETED"
+    locations[0]["zip"] = "99999"
 
     # Run second transform
     result2 = transform_study(base_raw)
+    assert isinstance(result2["silver_locations"], list)
     id2 = result2["silver_locations"][0]["id"]
 
     # IDs should match because Business Key is (nct_id + facility + city + state + country)
@@ -163,14 +165,12 @@ def test_future_dates_parsing() -> None:
     raw_study = {
         "protocolSection": {
             "identificationModule": {"nctId": "NCT_FUTURE"},
-            "statusModule": {
-                "startDateStruct": {"date": "2099-12-31"},
-                "completionDateStruct": {"date": "3000-01-01"}
-            }
+            "statusModule": {"startDateStruct": {"date": "2099-12-31"}, "completionDateStruct": {"date": "3000-01-01"}},
         }
     }
 
     result = transform_study(raw_study)
+    assert isinstance(result["silver_studies"], list)
     study = result["silver_studies"][0]
 
     assert str(study["start_date"]) == "2099-12-31"
