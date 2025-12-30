@@ -21,12 +21,12 @@ from coreason_etl_clinicaltrialsgov.utils.logger import logger
 app = typer.Typer(pretty_exceptions_show_locals=False)
 
 
-@app.callback()  # type: ignore[misc]
+@app.callback()  # type: ignore[untyped-decorator]
 def main() -> None:
     """ClinicalTrials.gov ETL CLI."""
 
 
-@app.command()  # type: ignore[misc]
+@app.command()  # type: ignore[untyped-decorator]
 def run(
     page_size: Annotated[int, typer.Option(help="API page size")] = settings.API_PAGE_SIZE,
     query_term: Annotated[Optional[str], typer.Option(help="Optional query term for filtering")] = None,
