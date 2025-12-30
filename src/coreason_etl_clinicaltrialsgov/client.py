@@ -13,9 +13,10 @@ from datetime import datetime, timezone
 from typing import Any, Iterator, Optional, cast
 
 import requests
-from loguru import logger
 from tenacity import RetryCallState, retry, stop_after_attempt, wait_exponential
 from tenacity.wait import wait_base
+
+from coreason_etl_clinicaltrialsgov.utils.logger import logger
 
 
 class wait_for_retry_after(wait_base):
