@@ -83,7 +83,7 @@ def generate_coreason_id(nct_id: str, first_received_date: Optional[str]) -> str
 def generate_surrogate_key(parent_id: str, *parts: str | int | None) -> str:
     """Generate deterministic UUID for child records."""
     # Concatenate all parts to form a unique seed for this record
-    seed_parts = [parent_id]
+    seed_parts = [parent_id.replace("|", "_")]
     for p in parts:
         if p is None:
             seed_parts.append("")
