@@ -12,9 +12,8 @@ from typing import Any, Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
-import polars as pl
-from dlt.extract.items import DataItemWithMeta
 from dlt.extract.exceptions import ResourceExtractionError
+from dlt.extract.items import DataItemWithMeta
 
 from coreason_etl_clinicaltrialsgov.extractors import clinicaltrials_source
 
@@ -29,6 +28,7 @@ def mock_client_class() -> Generator[MagicMock, None, None]:
 def mock_transform_gold() -> Generator[MagicMock, None, None]:
     with patch("coreason_etl_clinicaltrialsgov.extractors.transform_gold") as mock:
         yield mock
+
 
 # Mock Polars transformers
 @pytest.fixture
@@ -172,6 +172,7 @@ def test_studies_generator_gold_skip(
     # Verify mock call
     mock_transform_gold.assert_called_once()
 
+
 def test_studies_generator_batching_and_exception(
     mock_client_class: MagicMock, mock_polars_transformers: dict[str, MagicMock]
 ) -> None:
@@ -190,7 +191,7 @@ def test_studies_generator_batching_and_exception(
         return m
 
     for m in mock_polars_transformers.values():
-        m.return_value = mock_df([]) # Return empty for simplicity
+        m.return_value = mock_df([])  # Return empty for simplicity
 
     # Use page_size=2
     source = clinicaltrials_source(page_size=2)
@@ -225,6 +226,7 @@ def test_studies_generator_exception_handling(
     # Check for ResourceExtractionError which wraps the ValueError
     with pytest.raises(ResourceExtractionError):
         list(resource)
+
 
 def test_studies_generator_with_query_term(
     mock_client_class: MagicMock, mock_polars_transformers: dict[str, MagicMock]

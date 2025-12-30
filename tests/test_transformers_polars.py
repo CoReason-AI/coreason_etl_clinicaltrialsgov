@@ -51,7 +51,7 @@ SAMPLE_STUDY = {
                     "country": "United States",
                     "zip": "10001",
                     "status": "RECRUITING",
-                    "geoPoint": {"lat": 40.71, "lon": -74.00}
+                    "geoPoint": {"lat": 40.71, "lon": -74.00},
                 }
             ]
         },
@@ -66,16 +66,10 @@ SAMPLE_STUDY = {
             ]
         },
         "outcomesModule": {
-            "primaryOutcomes": [
-                {"measure": "Survival", "timeFrame": "1 year", "description": "Overall survival"}
-            ],
-            "secondaryOutcomes": [
-                {"measure": "Safety", "timeFrame": "1 year", "description": "Adverse events"}
-            ],
+            "primaryOutcomes": [{"measure": "Survival", "timeFrame": "1 year", "description": "Overall survival"}],
+            "secondaryOutcomes": [{"measure": "Safety", "timeFrame": "1 year", "description": "Adverse events"}],
         },
-        "referencesModule": {
-            "references": [{"pmid": "123456", "citation": "Author et al. 2023", "retraction": None}]
-        },
+        "referencesModule": {"references": [{"pmid": "123456", "citation": "Author et al. 2023", "retraction": None}]},
     }
 }
 
@@ -110,9 +104,11 @@ def lf_sample() -> pl.LazyFrame:
     # Actually, Polars.read_json or from_dicts might union keys if they differ.
     return pl.DataFrame([SAMPLE_STUDY, SAMPLE_STUDY_MISSING]).lazy()
 
+
 @pytest.fixture
 def lf_empty() -> pl.LazyFrame:
     return pl.DataFrame([SAMPLE_STUDY_EMPTY]).lazy()
+
 
 def test_silver_studies(lf_sample: pl.LazyFrame) -> None:
     df = transform_to_silver_studies(lf_sample)
@@ -152,6 +148,7 @@ def test_silver_sponsors(lf_sample: pl.LazyFrame, lf_empty: pl.LazyFrame) -> Non
     assert df_e.height == 0
     assert "agency_class" in df_e.columns
 
+
 def test_silver_locations(lf_sample: pl.LazyFrame, lf_empty: pl.LazyFrame) -> None:
     df = transform_to_silver_locations(lf_sample)
     rows = df.to_dicts()
@@ -169,6 +166,7 @@ def test_silver_locations(lf_sample: pl.LazyFrame, lf_empty: pl.LazyFrame) -> No
     assert df_e.height == 0
     assert "facility" in df_e.columns
 
+
 def test_silver_interventions(lf_sample: pl.LazyFrame, lf_empty: pl.LazyFrame) -> None:
     df = transform_to_silver_interventions(lf_sample)
     rows = df.to_dicts()
@@ -181,6 +179,7 @@ def test_silver_interventions(lf_sample: pl.LazyFrame, lf_empty: pl.LazyFrame) -
     df_e = transform_to_silver_interventions(lf_empty)
     assert df_e.height == 0
     assert "other_names" in df_e.columns
+
 
 def test_silver_outcomes(lf_sample: pl.LazyFrame, lf_empty: pl.LazyFrame) -> None:
     df = transform_to_silver_outcomes(lf_sample)
@@ -195,6 +194,7 @@ def test_silver_outcomes(lf_sample: pl.LazyFrame, lf_empty: pl.LazyFrame) -> Non
     assert df_e.height == 0
     assert "outcome_type" in df_e.columns
 
+
 def test_silver_references(lf_sample: pl.LazyFrame, lf_empty: pl.LazyFrame) -> None:
     df = transform_to_silver_references(lf_sample)
     rows = df.to_dicts()
@@ -208,9 +208,17 @@ def test_silver_references(lf_sample: pl.LazyFrame, lf_empty: pl.LazyFrame) -> N
     assert df_e.height == 0
     assert "citation" in df_e.columns
 
+
 def test_all_missing_structure() -> None:
     # Test completely empty dicts to ensure schema inspection safely returns None literals
-    data = [{"protocolSection": {"identificationModule": {"nctId": "NCT000"}, "statusModule": {"studyFirstPostDateStruct": {"date": "2023-01-01"}}}}]
+    data = [
+        {
+            "protocolSection": {
+                "identificationModule": {"nctId": "NCT000"},
+                "statusModule": {"studyFirstPostDateStruct": {"date": "2023-01-01"}},
+            }
+        }
+    ]
     lf = pl.DataFrame(data).lazy()
 
     # Just ensure they don't crash and return empty DFs or valid DFs with Nulls
