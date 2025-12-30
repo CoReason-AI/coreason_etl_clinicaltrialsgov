@@ -8,18 +8,14 @@
 #
 # Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
 
-import os
-import sys
 
 import dlt
-from loguru import logger
 
 from coreason_etl_clinicaltrialsgov.extractors import clinicaltrials_source
-
-logger.remove()
-logger.add(sys.stderr, level=os.getenv("LOG_LEVEL", "INFO"))
+from coreason_etl_clinicaltrialsgov.utils.logger import logger
 
 
+@logger.catch  # type: ignore
 def run_pipeline() -> None:
     """Run the ClinicalTrials.gov ETL pipeline."""
 

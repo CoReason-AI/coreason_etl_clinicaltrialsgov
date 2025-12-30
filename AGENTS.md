@@ -143,3 +143,28 @@ STOP and ASK the user before:
 * Deleting any file outside of src/ or tests/.
 * Adding a dependency that requires OS-level libraries (e.g., libpq-dev).
 * Committing any secrets or API keys (even for testing).
+
+## **8. Logging & Observability**
+
+This project uses `loguru` as the required standard for all logging operations. The standard `logging` module and `print()` statements are strictly prohibited.
+
+### **Standards**
+
+*   **Dependency:** Always import the configured logger.
+*   **Outputs:**
+    *   **Console:** Human-readable text format (INFO level and above).
+    *   **File:** JSON format at `logs/app.log` (All logs, rotated every 500 MB or 10 days).
+
+### **Usage Example**
+
+```python
+from coreason_etl_clinicaltrialsgov.utils.logger import logger
+
+# Inside an Agent or Module
+logger.info("Agent started task")
+try:
+    # ... logic ...
+    pass
+except Exception:
+    logger.exception("Agent failed")
+```
