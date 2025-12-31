@@ -1,5 +1,4 @@
 from datetime import date
-from typing import Any
 
 import polars as pl
 import pytest
@@ -434,7 +433,7 @@ def test_outcomes_missing_keys() -> None:
                 "identificationModule": {"nctId": "NCT999"},
                 "statusModule": {"studyFirstPostDateStruct": {"date": "2023-01-01"}},
                 "outcomesModule": {
-                    "primaryOutcomes": [{"measure": "M1"}] # Missing timeFrame, description
+                    "primaryOutcomes": [{"measure": "M1"}]  # Missing timeFrame, description
                 },
             }
         }
@@ -453,7 +452,7 @@ def test_references_missing_keys() -> None:
                 "identificationModule": {"nctId": "NCT999"},
                 "statusModule": {"studyFirstPostDateStruct": {"date": "2023-01-01"}},
                 "referencesModule": {
-                    "references": [{"pmid": "111"}] # Missing citation
+                    "references": [{"pmid": "111"}]  # Missing citation
                 },
             }
         }

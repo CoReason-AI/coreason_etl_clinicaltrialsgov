@@ -30,9 +30,9 @@ def test_get_enrollment_bucket(count: int | None, expected: str | None) -> None:
 
 
 def test_transform_gold_success() -> None:
-    raw_study = {"resultsSection": {}}  # Indicates has_results=True
+    raw_study: dict[str, Any] = {"resultsSection": {}}  # Indicates has_results=True
 
-    silver_study = {
+    silver_study: dict[str, Any] = {
         "source_id": "NCT00000001",
         "coreason_id": "uuid-123",
         "title": "Test Study",
@@ -42,7 +42,7 @@ def test_transform_gold_success() -> None:
         "enrollment_count": 100,
     }
 
-    locations = [
+    locations: list[dict[str, Any]] = [
         {"country": "United States"},
         {"country": "Canada"},
     ]
@@ -61,12 +61,12 @@ def test_transform_gold_success() -> None:
 
 
 def test_transform_gold_filtered_status() -> None:
-    raw_study = {}
-    silver_study = {
+    raw_study: dict[str, Any] = {}
+    silver_study: dict[str, Any] = {
         "source_id": "NCT00000001",
-        "overall_status": "WITHDRAWN", # Invalid status
+        "overall_status": "WITHDRAWN",  # Invalid status
     }
-    locations = []
+    locations: list[dict[str, Any]] = []
 
     gold = transform_gold(raw_study, silver_study, locations)
     assert gold is None
@@ -75,8 +75,8 @@ def test_transform_gold_filtered_status() -> None:
 def test_transform_gold_string_dates() -> None:
     # Verify it handles string dates as input
 
-    raw_study = {}
-    silver_study = {
+    raw_study: dict[str, Any] = {}
+    silver_study: dict[str, Any] = {
         "source_id": "NCT00000001",
         "coreason_id": "uuid-123",
         "overall_status": "COMPLETED",
@@ -84,7 +84,7 @@ def test_transform_gold_string_dates() -> None:
         "completion_date": "2024-01-01",
         "enrollment_count": 50,
     }
-    locations = []
+    locations: list[dict[str, Any]] = []
 
     gold = transform_gold(raw_study, silver_study, locations)
     assert gold is not None
