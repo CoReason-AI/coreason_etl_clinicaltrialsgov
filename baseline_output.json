@@ -1,0 +1,98 @@
+{
+  "silver_interventions": [
+    {
+      "coreason_id": "41e67125-1ea2-5cca-91e1-b7e2a952f90b",
+      "description": "Daily dose",
+      "id": "b5e87a47-c91a-5d36-8aa6-37c30c097479",
+      "name": "Drug X",
+      "other_names": [
+        "Brand X"
+      ],
+      "source_id": "NCT00000001",
+      "type": "DRUG"
+    }
+  ],
+  "silver_locations": [
+    {
+      "city": "New York",
+      "coreason_id": "41e67125-1ea2-5cca-91e1-b7e2a952f90b",
+      "country": "United States",
+      "facility": "Hospital A",
+      "geo_point": null,
+      "id": "84535ea0-3429-52f1-aded-7ae54f58ab19",
+      "source_id": "NCT00000001",
+      "state": "NY",
+      "status": "RECRUITING",
+      "zip": "10001"
+    }
+  ],
+  "silver_outcomes": [
+    {
+      "coreason_id": "41e67125-1ea2-5cca-91e1-b7e2a952f90b",
+      "description": "Overall survival",
+      "id": "8ecefb53-9bad-559e-8a4c-511f3b33d57d",
+      "measure": "Survival",
+      "outcome_type": "PRIMARY",
+      "source_id": "NCT00000001",
+      "time_frame": "1 year"
+    },
+    {
+      "coreason_id": "41e67125-1ea2-5cca-91e1-b7e2a952f90b",
+      "description": "Adverse events",
+      "id": "ddf20787-465e-5f46-ba18-73f82c3e02b1",
+      "measure": "Safety",
+      "outcome_type": "SECONDARY",
+      "source_id": "NCT00000001",
+      "time_frame": "1 year"
+    }
+  ],
+  "silver_references": [
+    {
+      "citation": "Author et al. 2023",
+      "coreason_id": "41e67125-1ea2-5cca-91e1-b7e2a952f90b",
+      "id": "fa5e8bb3-dd4c-54c8-9042-3182b3d0d0b7",
+      "pmid": "123456",
+      "retraction": null,
+      "source_id": "NCT00000001",
+      "type": "REFERENCE"
+    }
+  ],
+  "silver_sponsors": [
+    {
+      "agency_class": "INDUSTRY",
+      "coreason_id": "41e67125-1ea2-5cca-91e1-b7e2a952f90b",
+      "id": "ca3ec282-ead3-525f-8e45-4708afb73549",
+      "name": "Big Pharma",
+      "role": "LEAD",
+      "source_id": "NCT00000001"
+    },
+    {
+      "agency_class": "OTHER",
+      "coreason_id": "41e67125-1ea2-5cca-91e1-b7e2a952f90b",
+      "id": "b0c7494b-45fa-50a4-aa35-70468a753c8f",
+      "name": "University X",
+      "role": "COLLABORATOR",
+      "source_id": "NCT00000001"
+    }
+  ],
+  "silver_studies": [
+    {
+      "accepted_healthy_volunteers": true,
+      "completion_date": "2024-01-01",
+      "coreason_id": "41e67125-1ea2-5cca-91e1-b7e2a952f90b",
+      "enrollment_count": 50,
+      "enrollment_type": "ESTIMATED",
+      "max_age": 65.0,
+      "min_age": 18.0,
+      "official_title": "Official Test Study Title",
+      "org_study_id": "ORG-001",
+      "overall_status": "RECRUITING",
+      "phases": "PHASE1|PHASE2",
+      "sex": "ALL",
+      "source_id": "NCT00000001",
+      "start_date": "2023-01-01",
+      "study_type": "INTERVENTIONAL",
+      "title": "Test Study"
+    }
+  ]
+}
