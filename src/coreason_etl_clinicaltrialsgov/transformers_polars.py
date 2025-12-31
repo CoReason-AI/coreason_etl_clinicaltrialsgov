@@ -118,6 +118,26 @@ def _safe_get_field(
     return expr.alias(alias)
 
 
+def _gen_sponsor_id_udf(row: dict[str, Any]) -> str:
+    return _generate_surrogate_key_udf(row["nct_id"], row["role"], row["name"])
+
+
+def _gen_loc_id_udf(row: dict[str, Any]) -> str:
+    return _generate_surrogate_key_udf(row["nct_id"], row["facility"], row["city"], row["state"], row["country"])
+
+
+def _gen_int_id_udf(row: dict[str, Any]) -> str:
+    return _generate_surrogate_key_udf(row["nct_id"], row["type"], row["name"])
+
+
+def _gen_outcome_id_udf(row: dict[str, Any]) -> str:
+    return _generate_surrogate_key_udf(row["nct_id"], row["outcome_type"], row["measure"], row["time_frame"])
+
+
+def _gen_ref_id_udf(row: dict[str, Any]) -> str:
+    return _generate_surrogate_key_udf(row["nct_id"], row["pmid"], row["citation"])
+
+
 # --- Transformers ---
 
 
@@ -291,13 +311,10 @@ def transform_to_silver_sponsors(lf: pl.LazyFrame) -> pl.DataFrame:
 
     combined = pl.concat(to_concat)
 
-    def _gen_sponsor_id(row: dict[str, Any]) -> str:
-        return _generate_surrogate_key_udf(row["nct_id"], row["role"], row["name"])
-
     return (
         combined.lazy()
         .with_columns(
-            pl.struct(["nct_id", "role", "name"]).map_elements(_gen_sponsor_id, return_dtype=pl.String).alias("id")
+            pl.struct(["nct_id", "role", "name"]).map_elements(_gen_sponsor_id_udf, return_dtype=pl.String).alias("id")
         )
         .unique(subset=["id"], keep="first")
         .select([
@@ -378,14 +395,11 @@ def transform_to_silver_locations(lf: pl.LazyFrame) -> pl.DataFrame:
         .collect()
     )
 
-    def _gen_loc_id(row: dict[str, Any]) -> str:
-        return _generate_surrogate_key_udf(row["nct_id"], row["facility"], row["city"], row["state"], row["country"])
-
     return (
         df.lazy()
         .with_columns(
             pl.struct(["nct_id", "facility", "city", "state", "country"])
-            .map_elements(_gen_loc_id, return_dtype=pl.String)
+            .map_elements(_gen_loc_id_udf, return_dtype=pl.String)
             .alias("id")
         )
         .unique(subset=["id"], keep="first")
@@ -458,13 +472,10 @@ def transform_to_silver_interventions(lf: pl.LazyFrame) -> pl.DataFrame:
         .collect()
     )
 
-    def _gen_int_id(row: dict[str, Any]) -> str:
-        return _generate_surrogate_key_udf(row["nct_id"], row["type"], row["name"])
-
     return (
         df.lazy()
         .with_columns(
-            pl.struct(["nct_id", "type", "name"]).map_elements(_gen_int_id, return_dtype=pl.String).alias("id")
+            pl.struct(["nct_id", "type", "name"]).map_elements(_gen_int_id_udf, return_dtype=pl.String).alias("id")
         )
         .unique(subset=["id"], keep="first")
         .select([
@@ -562,14 +573,11 @@ def transform_to_silver_outcomes(lf: pl.LazyFrame) -> pl.DataFrame:
 
     combined = pl.concat(dfs)
 
-    def _gen_outcome_id(row: dict[str, Any]) -> str:
-        return _generate_surrogate_key_udf(row["nct_id"], row["outcome_type"], row["measure"], row["time_frame"])
-
     return (
         combined.lazy()
         .with_columns(
             pl.struct(["nct_id", "outcome_type", "measure", "time_frame"])
-            .map_elements(_gen_outcome_id, return_dtype=pl.String)
+            .map_elements(_gen_outcome_id_udf, return_dtype=pl.String)
             .alias("id")
         )
         .unique(subset=["id"], keep="first")
@@ -638,14 +646,11 @@ def transform_to_silver_references(lf: pl.LazyFrame) -> pl.DataFrame:
         .collect()
     )
 
-    def _gen_ref_id(row: dict[str, Any]) -> str:
-        return _generate_surrogate_key_udf(row["nct_id"], row["pmid"], row["citation"])
-
     return (
         df.lazy()
         .with_columns(pl.col("pmid").cast(pl.String))
         .with_columns(
-            pl.struct(["nct_id", "pmid", "citation"]).map_elements(_gen_ref_id, return_dtype=pl.String).alias("id")
+            pl.struct(["nct_id", "pmid", "citation"]).map_elements(_gen_ref_id_udf, return_dtype=pl.String).alias("id")
         )
         .unique(subset=["id"], keep="first")
         .select([

@@ -60,9 +60,6 @@ def clinicaltrials_source(page_size: int = 100, query_term: Optional[str] = None
         current_batch: list[dict[str, Any]] = []
 
         def process_batch(batch: list[dict[str, Any]]) -> Iterator[TDataItems]:
-            if not batch:
-                return
-
             now_ts = datetime.now(timezone.utc).isoformat()
 
             # 1. Yield Bronze

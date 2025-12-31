@@ -1,9 +1,15 @@
 from datetime import date
+from typing import Any
 
 import polars as pl
 import pytest
 
 from coreason_etl_clinicaltrialsgov.transformers_polars import (
+    _gen_int_id_udf,
+    _gen_loc_id_udf,
+    _gen_outcome_id_udf,
+    _gen_ref_id_udf,
+    _gen_sponsor_id_udf,
     _generate_coreason_id_udf,
     _generate_surrogate_key_udf,
     _normalize_age_udf,
@@ -71,16 +77,10 @@ SAMPLE_STUDY = {
             ]
         },
         "outcomesModule": {
-            "primaryOutcomes": [
-                {"measure": "Survival", "timeFrame": "1 year", "description": "Overall survival"}
-            ],
-            "secondaryOutcomes": [
-                {"measure": "Safety", "timeFrame": "1 year", "description": "Adverse events"}
-            ],
+            "primaryOutcomes": [{"measure": "Survival", "timeFrame": "1 year", "description": "Overall survival"}],
+            "secondaryOutcomes": [{"measure": "Safety", "timeFrame": "1 year", "description": "Adverse events"}],
         },
-        "referencesModule": {
-            "references": [{"pmid": "123456", "citation": "Author et al. 2023", "retraction": None}]
-        },
+        "referencesModule": {"references": [{"pmid": "123456", "citation": "Author et al. 2023", "retraction": None}]},
     }
 }
 
@@ -115,9 +115,11 @@ def lf_sample() -> pl.LazyFrame:
     # Actually, Polars.read_json or from_dicts might union keys if they differ.
     return pl.DataFrame([SAMPLE_STUDY, SAMPLE_STUDY_MISSING]).lazy()
 
+
 @pytest.fixture
 def lf_empty() -> pl.LazyFrame:
     return pl.DataFrame([SAMPLE_STUDY_EMPTY]).lazy()
+
 
 def test_silver_studies(lf_sample: pl.LazyFrame) -> None:
     df = transform_to_silver_studies(lf_sample)
@@ -157,6 +159,7 @@ def test_silver_sponsors(lf_sample: pl.LazyFrame, lf_empty: pl.LazyFrame) -> Non
     assert df_e.height == 0
     assert "agency_class" in df_e.columns
 
+
 def test_silver_locations(lf_sample: pl.LazyFrame, lf_empty: pl.LazyFrame) -> None:
     df = transform_to_silver_locations(lf_sample)
     rows = df.to_dicts()
@@ -174,6 +177,7 @@ def test_silver_locations(lf_sample: pl.LazyFrame, lf_empty: pl.LazyFrame) -> No
     assert df_e.height == 0
     assert "facility" in df_e.columns
 
+
 def test_silver_interventions(lf_sample: pl.LazyFrame, lf_empty: pl.LazyFrame) -> None:
     df = transform_to_silver_interventions(lf_sample)
     rows = df.to_dicts()
@@ -186,6 +190,7 @@ def test_silver_interventions(lf_sample: pl.LazyFrame, lf_empty: pl.LazyFrame) -
     df_e = transform_to_silver_interventions(lf_empty)
     assert df_e.height == 0
     assert "other_names" in df_e.columns
+
 
 def test_silver_outcomes(lf_sample: pl.LazyFrame, lf_empty: pl.LazyFrame) -> None:
     df = transform_to_silver_outcomes(lf_sample)
@@ -200,6 +205,7 @@ def test_silver_outcomes(lf_sample: pl.LazyFrame, lf_empty: pl.LazyFrame) -> Non
     assert df_e.height == 0
     assert "outcome_type" in df_e.columns
 
+
 def test_silver_references(lf_sample: pl.LazyFrame, lf_empty: pl.LazyFrame) -> None:
     df = transform_to_silver_references(lf_sample)
     rows = df.to_dicts()
@@ -212,6 +218,7 @@ def test_silver_references(lf_sample: pl.LazyFrame, lf_empty: pl.LazyFrame) -> N
     df_e = transform_to_silver_references(lf_empty)
     assert df_e.height == 0
     assert "citation" in df_e.columns
+
 
 def test_all_missing_structure() -> None:
     # Test completely empty dicts to ensure schema inspection safely returns None literals
@@ -233,7 +240,9 @@ def test_all_missing_structure() -> None:
     transform_to_silver_outcomes(lf)
     transform_to_silver_references(lf)
 
+
 # --- UDF Coverage Tests ---
+
 
 def test_parse_date_udf() -> None:
     assert _parse_date_udf("2023-01-01") == "2023-01-01"
@@ -243,6 +252,7 @@ def test_parse_date_udf() -> None:
     # Invalid strings are just padded by the UDF, Polars handles parsing failure
     # Updated to reflect implementation behavior (no validation inside UDF)
     assert _parse_date_udf("invalid") == "invalid-01-01"
+
 
 def test_normalize_age_udf() -> None:
     assert _normalize_age_udf("18 Years") == 18.0
@@ -258,17 +268,39 @@ def test_normalize_age_udf() -> None:
     # Coverage for unknown unit (returns raw value)
     assert _normalize_age_udf("18 Decades") == 18.0
 
+
 def test_generate_coreason_id_udf() -> None:
     uid = _generate_coreason_id_udf("NCT123", "2023-01-01")
     assert isinstance(uid, str)
     assert len(uid) > 0
+
 
 def test_generate_surrogate_key_udf() -> None:
     key = _generate_surrogate_key_udf("NCT123", "PART1", None, "PART2")
     assert isinstance(key, str)
     assert len(key) > 0
 
+
+def test_row_udfs() -> None:
+    # Explicitly test the row-based UDF wrappers to ensure coverage
+    row_sp = {"nct_id": "N1", "role": "R", "name": "N"}
+    assert isinstance(_gen_sponsor_id_udf(row_sp), str)
+
+    row_loc = {"nct_id": "N1", "facility": "F", "city": "C", "state": "S", "country": "CO"}
+    assert isinstance(_gen_loc_id_udf(row_loc), str)
+
+    row_int = {"nct_id": "N1", "type": "T", "name": "N"}
+    assert isinstance(_gen_int_id_udf(row_int), str)
+
+    row_out = {"nct_id": "N1", "outcome_type": "T", "measure": "M", "time_frame": "TF"}
+    assert isinstance(_gen_outcome_id_udf(row_out), str)
+
+    row_ref = {"nct_id": "N1", "pmid": "123", "citation": "C"}
+    assert isinstance(_gen_ref_id_udf(row_ref), str)
+
+
 # --- Safe Get Field Coverage Tests ---
+
 
 def test_safe_get_field_internals() -> None:
     # 1. Test root column missing
@@ -295,93 +327,174 @@ def test_safe_get_field_internals() -> None:
     res4 = lf4.select(expr4).collect()
     assert res4.item(0, 0) is None
 
+
 # --- Branch Coverage for Transformers (Empty Result Logic) ---
+
 
 def test_sponsors_structure_exists_values_null() -> None:
     schema = {
-        "protocolSection": pl.Struct([
-            pl.Field("identificationModule", pl.Struct([pl.Field("nctId", pl.String)])),
-            pl.Field("statusModule", pl.Struct([pl.Field("studyFirstPostDateStruct", pl.Struct([pl.Field("date", pl.String)]))])),
-            pl.Field("sponsorCollaboratorsModule", pl.Struct([
-                pl.Field("leadSponsor", pl.Struct([pl.Field("name", pl.String), pl.Field("class", pl.String)])),
-                pl.Field("collaborators", pl.List(pl.Struct([pl.Field("name", pl.String), pl.Field("class", pl.String)])))
-            ]))
-        ])
+        "protocolSection": pl.Struct(
+            [
+                pl.Field("identificationModule", pl.Struct([pl.Field("nctId", pl.String)])),
+                pl.Field(
+                    "statusModule",
+                    pl.Struct([pl.Field("studyFirstPostDateStruct", pl.Struct([pl.Field("date", pl.String)]))]),
+                ),
+                pl.Field(
+                    "sponsorCollaboratorsModule",
+                    pl.Struct(
+                        [
+                            pl.Field(
+                                "leadSponsor", pl.Struct([pl.Field("name", pl.String), pl.Field("class", pl.String)])
+                            ),
+                            pl.Field(
+                                "collaborators",
+                                pl.List(pl.Struct([pl.Field("name", pl.String), pl.Field("class", pl.String)])),
+                            ),
+                        ]
+                    ),
+                ),
+            ]
+        )
     }
-    data = [{"protocolSection": {"identificationModule": {"nctId": "NCT999"}, "statusModule": {"studyFirstPostDateStruct": {"date": "2023-01-01"}}, "sponsorCollaboratorsModule": {"leadSponsor": None, "collaborators": None}}}]
+    data = [
+        {
+            "protocolSection": {
+                "identificationModule": {"nctId": "NCT999"},
+                "statusModule": {"studyFirstPostDateStruct": {"date": "2023-01-01"}},
+                "sponsorCollaboratorsModule": {"leadSponsor": None, "collaborators": None},
+            }
+        }
+    ]
     lf = pl.DataFrame(data).lazy().with_columns(pl.col("protocolSection").cast(schema["protocolSection"]))
     df = transform_to_silver_sponsors(lf)
     assert df.height == 0
 
-def test_locations_structure_exists_values_null() -> None:
-    schema = {
-        "protocolSection": pl.Struct([
-            pl.Field("identificationModule", pl.Struct([pl.Field("nctId", pl.String)])),
-            pl.Field("statusModule", pl.Struct([pl.Field("studyFirstPostDateStruct", pl.Struct([pl.Field("date", pl.String)]))])),
-            pl.Field("contactsLocationsModule", pl.Struct([
-                pl.Field("locations", pl.List(pl.Struct([
-                    pl.Field("facility", pl.String), pl.Field("city", pl.String), pl.Field("state", pl.String),
-                    pl.Field("country", pl.String), pl.Field("zip", pl.String), pl.Field("status", pl.String),
-                    pl.Field("geoPoint", pl.Struct([pl.Field("lat", pl.Float64), pl.Field("lon", pl.Float64)]))
-                ])))
-            ]))
-        ])
-    }
-    data = [{"protocolSection": {"identificationModule": {"nctId": "NCT999"}, "statusModule": {"studyFirstPostDateStruct": {"date": "2023-01-01"}}, "contactsLocationsModule": {"locations": None}}}]
-    lf = pl.DataFrame(data).lazy().with_columns(pl.col("protocolSection").cast(schema["protocolSection"]))
+
+def test_sponsors_missing_keys_in_struct() -> None:
+    # Test where sponsorCollaboratorsModule exists but is empty dict (inferred as struct with NO fields)
+    data = [
+        {
+            "protocolSection": {
+                "identificationModule": {"nctId": "NCT999"},
+                "statusModule": {"studyFirstPostDateStruct": {"date": "2023-01-01"}},
+                "sponsorCollaboratorsModule": {},  # Empty struct
+            }
+        }
+    ]
+    lf = pl.DataFrame(data).lazy()
+    df = transform_to_silver_sponsors(lf)
+    assert df.height == 0
+
+
+def test_locations_missing_keys() -> None:
+    # Test where locations exists but items lack fields (incomplete struct)
+    data = [
+        {
+            "protocolSection": {
+                "identificationModule": {"nctId": "NCT999"},
+                "statusModule": {"studyFirstPostDateStruct": {"date": "2023-01-01"}},
+                "contactsLocationsModule": {
+                    "locations": [{"facility": "Fac1"}]  # Missing city, zip, etc.
+                },
+            }
+        }
+    ]
+    lf = pl.DataFrame(data).lazy()
     df = transform_to_silver_locations(lf)
-    assert df.height == 0
+    assert df.height == 1
+    assert df["facility"][0] == "Fac1"
+    # missing fields should be null
+    assert df["city"][0] is None
 
-def test_interventions_structure_exists_values_null() -> None:
-    schema = {
-        "protocolSection": pl.Struct([
-            pl.Field("identificationModule", pl.Struct([pl.Field("nctId", pl.String)])),
-            pl.Field("statusModule", pl.Struct([pl.Field("studyFirstPostDateStruct", pl.Struct([pl.Field("date", pl.String)]))])),
-            pl.Field("armsInterventionsModule", pl.Struct([
-                pl.Field("interventions", pl.List(pl.Struct([
-                    pl.Field("type", pl.String), pl.Field("name", pl.String),
-                    pl.Field("description", pl.String), pl.Field("otherNames", pl.List(pl.String))
-                ])))
-            ]))
-        ])
-    }
-    data = [{"protocolSection": {"identificationModule": {"nctId": "NCT999"}, "statusModule": {"studyFirstPostDateStruct": {"date": "2023-01-01"}}, "armsInterventionsModule": {"interventions": None}}}]
-    lf = pl.DataFrame(data).lazy().with_columns(pl.col("protocolSection").cast(schema["protocolSection"]))
+
+def test_interventions_missing_keys() -> None:
+    data = [
+        {
+            "protocolSection": {
+                "identificationModule": {"nctId": "NCT999"},
+                "statusModule": {"studyFirstPostDateStruct": {"date": "2023-01-01"}},
+                "armsInterventionsModule": {
+                    "interventions": [{"name": "Drug A"}]  # Missing type, description
+                },
+            }
+        }
+    ]
+    lf = pl.DataFrame(data).lazy()
     df = transform_to_silver_interventions(lf)
-    assert df.height == 0
+    assert df.height == 1
+    assert df["name"][0] == "Drug A"
+    assert df["type"][0] is None
 
-def test_outcomes_structure_exists_values_null() -> None:
-    # Define minimal outcomes struct
-    o_struct = pl.List(pl.Struct([pl.Field("measure", pl.String), pl.Field("timeFrame", pl.String), pl.Field("description", pl.String)]))
-    schema = {
-        "protocolSection": pl.Struct([
-            pl.Field("identificationModule", pl.Struct([pl.Field("nctId", pl.String)])),
-            pl.Field("statusModule", pl.Struct([pl.Field("studyFirstPostDateStruct", pl.Struct([pl.Field("date", pl.String)]))])),
-            pl.Field("outcomesModule", pl.Struct([
-                pl.Field("primaryOutcomes", o_struct),
-                pl.Field("secondaryOutcomes", o_struct),
-                pl.Field("otherOutcomes", o_struct)
-            ]))
-        ])
-    }
-    data = [{"protocolSection": {"identificationModule": {"nctId": "NCT999"}, "statusModule": {"studyFirstPostDateStruct": {"date": "2023-01-01"}}, "outcomesModule": {"primaryOutcomes": None, "secondaryOutcomes": None, "otherOutcomes": None}}}]
-    lf = pl.DataFrame(data).lazy().with_columns(pl.col("protocolSection").cast(schema["protocolSection"]))
+
+def test_outcomes_missing_keys() -> None:
+    data = [
+        {
+            "protocolSection": {
+                "identificationModule": {"nctId": "NCT999"},
+                "statusModule": {"studyFirstPostDateStruct": {"date": "2023-01-01"}},
+                "outcomesModule": {
+                    "primaryOutcomes": [{"measure": "M1"}] # Missing timeFrame, description
+                },
+            }
+        }
+    ]
+    lf = pl.DataFrame(data).lazy()
     df = transform_to_silver_outcomes(lf)
-    assert df.height == 0
+    assert df.height == 1
+    assert df["measure"][0] == "M1"
+    assert df["time_frame"][0] is None
 
-def test_references_structure_exists_values_null() -> None:
-    schema = {
-        "protocolSection": pl.Struct([
-            pl.Field("identificationModule", pl.Struct([pl.Field("nctId", pl.String)])),
-            pl.Field("statusModule", pl.Struct([pl.Field("studyFirstPostDateStruct", pl.Struct([pl.Field("date", pl.String)]))])),
-            pl.Field("referencesModule", pl.Struct([
-                pl.Field("references", pl.List(pl.Struct([
-                    pl.Field("pmid", pl.String), pl.Field("citation", pl.String), pl.Field("retraction", pl.Struct([pl.Field("retraction", pl.Boolean)]))
-                ])))
-            ]))
-        ])
-    }
-    data = [{"protocolSection": {"identificationModule": {"nctId": "NCT999"}, "statusModule": {"studyFirstPostDateStruct": {"date": "2023-01-01"}}, "referencesModule": {"references": None}}}]
-    lf = pl.DataFrame(data).lazy().with_columns(pl.col("protocolSection").cast(schema["protocolSection"]))
+
+def test_references_missing_keys() -> None:
+    data = [
+        {
+            "protocolSection": {
+                "identificationModule": {"nctId": "NCT999"},
+                "statusModule": {"studyFirstPostDateStruct": {"date": "2023-01-01"}},
+                "referencesModule": {
+                    "references": [{"pmid": "111"}] # Missing citation
+                },
+            }
+        }
+    ]
+    lf = pl.DataFrame(data).lazy()
     df = transform_to_silver_references(lf)
-    assert df.height == 0
+    assert df.height == 1
+    assert df["pmid"][0] == "111"
+    assert df["citation"][0] is None
+
+
+# --- Complex Edge Cases ---
+
+
+def test_surrogate_key_unicode() -> None:
+    # Test UDF directly
+    k1 = _generate_surrogate_key_udf("NCT123", "株式会社", "München")
+    k2 = _generate_surrogate_key_udf("NCT123", "株式会社", "München")
+    assert k1 == k2
+    k3 = _generate_surrogate_key_udf("NCT123", "株式会社", "Munchen")
+    assert k1 != k3
+
+
+def test_deduplication_in_transform() -> None:
+    # Test duplicates in sponsors
+    data = [
+        {
+            "protocolSection": {
+                "identificationModule": {"nctId": "NCT_DUP"},
+                "statusModule": {"studyFirstPostDateStruct": {"date": "2023-01-01"}},
+                "sponsorCollaboratorsModule": {
+                    "collaborators": [
+                        {"name": "Same Lab", "class": "OTHER"},
+                        {"name": "Same Lab", "class": "OTHER"},
+                    ]
+                },
+            }
+        }
+    ]
+    lf = pl.DataFrame(data).lazy()
+    df = transform_to_silver_sponsors(lf)
+    # Should be 1
+    assert df.height == 1
+    assert df["name"][0] == "Same Lab"

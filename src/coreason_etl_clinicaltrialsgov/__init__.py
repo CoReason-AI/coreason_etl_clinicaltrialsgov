@@ -12,4 +12,3 @@ from .client import ClinicalTrialsClient as ClinicalTrialsClient
 from .extractors import clinicaltrials_source as clinicaltrials_source
 from .main import app as app
 from .transformers import transform_gold as transform_gold
-from .transformers import transform_study as transform_study
