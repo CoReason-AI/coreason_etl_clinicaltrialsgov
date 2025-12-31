@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Any
 
 import polars as pl
 import pytest
@@ -497,3 +498,100 @@ def test_deduplication_in_transform() -> None:
     # Should be 1
     assert df.height == 1
     assert df["name"][0] == "Same Lab"
+
+
+def test_sponsor_identity_stability() -> None:
+    # Base study
+    base_json: dict[str, Any] = {
+        "protocolSection": {
+            "identificationModule": {"nctId": "NCT001"},
+            "statusModule": {"studyFirstPostDateStruct": {"date": "2023-01-01"}},
+            "sponsorCollaboratorsModule": {"leadSponsor": {"name": "Pharma Corp", "class": "INDUSTRY"}},
+        }
+    }
+
+    lf1 = pl.DataFrame([base_json]).lazy()
+    id1 = transform_to_silver_sponsors(lf1).item(0, "id")
+
+    # Modify non-key field (class)
+    base_json["protocolSection"]["sponsorCollaboratorsModule"]["leadSponsor"]["class"] = "OTHER"
+    lf2 = pl.DataFrame([base_json]).lazy()
+    id2 = transform_to_silver_sponsors(lf2).item(0, "id")
+
+    assert id1 == id2
+
+
+def test_reference_pmid_int() -> None:
+    # PMID as int
+    data = [
+        {
+            "protocolSection": {
+                "identificationModule": {"nctId": "NCT999"},
+                "statusModule": {"studyFirstPostDateStruct": {"date": "2023-01-01"}},
+                "referencesModule": {"references": [{"pmid": 12345, "citation": "Cite"}]},
+            }
+        }
+    ]
+    lf = pl.DataFrame(data).lazy()
+    df = transform_to_silver_references(lf)
+    assert df.height == 1
+    assert df["pmid"][0] == "12345"
+
+
+def test_dates_boundary() -> None:
+    # Extreme dates
+    data = [
+        {
+            "protocolSection": {
+                "identificationModule": {"nctId": "NCT_DATE"},
+                "statusModule": {
+                    "studyFirstPostDateStruct": {"date": "0000-00-00"},
+                    "startDateStruct": {"date": "9999-99-99"},
+                    "completionDateStruct": {"date": "2023-13-01"},
+                },
+            }
+        }
+    ]
+    lf = pl.DataFrame(data).lazy()
+    df = transform_to_silver_studies(lf)
+
+    # Check that invalid dates became None
+    assert df["start_date"][0] is None
+    assert df["completion_date"][0] is None
+    assert df["coreason_id"][0] is not None
+
+
+def test_large_list_deduplication() -> None:
+    # 1000 items, all duplicates
+    n = 1000
+    locs = [{"facility": "Same Fac", "city": "City", "country": "Country"} for _ in range(n)]
+    data = [
+        {
+            "protocolSection": {
+                "identificationModule": {"nctId": "NCT_LARGE"},
+                "statusModule": {"studyFirstPostDateStruct": {"date": "2023-01-01"}},
+                "contactsLocationsModule": {"locations": locs},
+            }
+        }
+    ]
+    lf = pl.DataFrame(data).lazy()
+    df = transform_to_silver_locations(lf)
+    assert df.height == 1
+
+
+def test_unicode_full() -> None:
+    title = "Étude 😷"
+    data = [
+        {
+            "protocolSection": {
+                "identificationModule": {"nctId": "NCT_UNI", "briefTitle": title},
+                "statusModule": {"studyFirstPostDateStruct": {"date": "2023-01-01"}},
+            }
+        }
+    ]
+    lf = pl.DataFrame(data).lazy()
+    df = transform_to_silver_studies(lf)
+    assert df["title"][0] == title
+    # key generation
+    uid = _generate_coreason_id_udf("NCT_UNI", "2023-01-01")
+    assert df["coreason_id"][0] == uid

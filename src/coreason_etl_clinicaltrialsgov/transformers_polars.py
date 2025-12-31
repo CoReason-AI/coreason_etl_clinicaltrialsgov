@@ -174,11 +174,11 @@ def transform_to_silver_studies(lf: pl.LazyFrame) -> pl.DataFrame:
             [
                 pl.col("start_date_raw")
                 .map_elements(_parse_date_udf, return_dtype=pl.String)
-                .str.to_date(strict=False)
+                .str.to_date(format="%Y-%m-%d", strict=False)
                 .alias("start_date"),
                 pl.col("completion_date_raw")
                 .map_elements(_parse_date_udf, return_dtype=pl.String)
-                .str.to_date(strict=False)
+                .str.to_date(format="%Y-%m-%d", strict=False)
                 .alias("completion_date"),
                 pl.col("phases_list").list.sort().list.join("|").alias("phases"),
                 pl.col("min_age_raw").map_elements(_normalize_age_udf, return_dtype=pl.Float64).alias("min_age"),
