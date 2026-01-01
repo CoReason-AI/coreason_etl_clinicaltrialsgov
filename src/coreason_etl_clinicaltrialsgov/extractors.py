@@ -9,15 +9,24 @@
 # Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
 
 from datetime import datetime, timezone
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator, Optional, Type
 
 import dlt
 import polars as pl
 from dlt.common.typing import TDataItems
 from dlt.sources import DltResource
 from loguru import logger
+from pydantic import BaseModel
 
 from coreason_etl_clinicaltrialsgov.client import ClinicalTrialsClient
+from coreason_etl_clinicaltrialsgov.schemas import (
+    SilverIntervention,
+    SilverLocation,
+    SilverOutcome,
+    SilverReference,
+    SilverSponsor,
+    SilverStudy,
+)
 from coreason_etl_clinicaltrialsgov.transformers import transform_gold
 from coreason_etl_clinicaltrialsgov.transformers_polars import (
     transform_to_silver_interventions,
@@ -88,14 +97,14 @@ def clinicaltrials_source(page_size: int = 100, query_term: Optional[str] = None
                 # Fallback or re-raise? Re-raise to ensure integrity.
                 raise e
 
-            # Map DataFrames to Table Names
-            silver_map = {
-                "silver_studies": df_studies,
-                "silver_sponsors": df_sponsors,
-                "silver_locations": df_locations,
-                "silver_interventions": df_interventions,
-                "silver_outcomes": df_outcomes,
-                "silver_references": df_references,
+            # Map DataFrames to Table Names and Pydantic Models
+            silver_map: dict[str, tuple[pl.DataFrame, Type[BaseModel]]] = {
+                "silver_studies": (df_studies, SilverStudy),
+                "silver_sponsors": (df_sponsors, SilverSponsor),
+                "silver_locations": (df_locations, SilverLocation),
+                "silver_interventions": (df_interventions, SilverIntervention),
+                "silver_outcomes": (df_outcomes, SilverOutcome),
+                "silver_references": (df_references, SilverReference),
             }
 
             # Prepare lookup for Gold transformation (need Silver Study + Locations per NCT ID)
@@ -112,12 +121,17 @@ def clinicaltrials_source(page_size: int = 100, query_term: Optional[str] = None
                     locations_lookup[sid] = []
                 locations_lookup[sid].append(loc)
 
-            # Yield Silver Records
-            for table_name, df in silver_map.items():
+            # Yield Silver Records with Strict Validation
+            for table_name, (df, model_class) in silver_map.items():
                 pk = "source_id" if table_name == "silver_studies" else "id"
                 for record in df.to_dicts():
+                    # Validate via Pydantic
+                    # This raises ValidationError if schema is violated
+                    validated_model = model_class.model_validate(record)
+                    validated_record = validated_model.model_dump()
+
                     yield dlt.mark.with_hints(
-                        dlt.mark.with_table_name(record, table_name),
+                        dlt.mark.with_table_name(validated_record, table_name),
                         dlt.mark.make_hints(write_disposition="merge", primary_key=pk),
                     )
 

@@ -79,12 +79,15 @@ def test_studies_generator_flow(
         return m
 
     # Setup transformer returns
+    # Must match Pydantic schemas (SilverStudy requires coreason_id)
     mock_polars_transformers["transform_to_silver_studies"].return_value = mock_df(
-        [{"source_id": "NCT001", "overall_status": "RECRUITING"}]
+        [{"source_id": "NCT001", "coreason_id": "CID1", "overall_status": "RECRUITING"}]
     )
+    # SilverSponsor requires id, source_id, coreason_id, role
     mock_polars_transformers["transform_to_silver_sponsors"].return_value = mock_df([])
+    # SilverLocation requires id, source_id, coreason_id
     mock_polars_transformers["transform_to_silver_locations"].return_value = mock_df(
-        [{"source_id": "NCT001", "city": "Boston"}]
+        [{"id": "L1", "source_id": "NCT001", "coreason_id": "CID1", "city": "Boston"}]
     )
     mock_polars_transformers["transform_to_silver_interventions"].return_value = mock_df([])
     mock_polars_transformers["transform_to_silver_outcomes"].return_value = mock_df([])
@@ -146,7 +149,10 @@ def test_studies_generator_gold_skip(
         m.to_dicts.return_value = data
         return m
 
-    mock_polars_transformers["transform_to_silver_studies"].return_value = mock_df([{"source_id": "NCT001"}])
+    # Mock valid study
+    mock_polars_transformers["transform_to_silver_studies"].return_value = mock_df(
+        [{"source_id": "NCT001", "coreason_id": "CID1"}]
+    )
     # Other transformers return empty
     for k, m in mock_polars_transformers.items():
         if k != "transform_to_silver_studies":
@@ -190,15 +196,16 @@ def test_studies_generator_batching_and_exception(
         m.to_dicts.return_value = data
         return m
 
-    for m in mock_polars_transformers.values():
-        m.return_value = mock_df([])  # Return empty for simplicity
+    # Return empty valid data for Silver tables to pass validation loop
+    for _, m in mock_polars_transformers.items():
+        m.return_value = mock_df([])
 
     # Use page_size=2
     source = clinicaltrials_source(page_size=2)
     resource = source.resources["studies_stream"]
     items = list(resource)
 
-    # 3 studies -> 3 Bronze + 3 Gold (if logic passes) + Silver overhead
+    # 3 studies -> 3 Bronze + Silver overhead
     # We just check we got all 3 bronze
     def extract_data(item: Any) -> Any:
         while isinstance(item, DataItemWithMeta):
@@ -237,3 +244,54 @@ def test_studies_generator_with_query_term(
     # Just run to hit the log logic
     source = clinicaltrials_source(query_term="Term")
     list(source.resources["studies_stream"])
+
+
+def test_studies_generator_high_water_mark(
+    mock_client_class: MagicMock, mock_polars_transformers: dict[str, MagicMock]
+) -> None:
+    # Test high water mark update coverage
+    client_instance = mock_client_class.return_value
+    # One study with a date
+    raw_study = {
+        "protocolSection": {
+            "identificationModule": {"nctId": "NCT_HWM"},
+            "statusModule": {"lastUpdatePostDateStruct": {"date": "2023-12-31"}},
+        }
+    }
+    client_instance.list_studies.return_value = iter([raw_study])
+
+    def mock_df(data: list[dict[str, Any]]) -> MagicMock:
+        m = MagicMock()
+        m.to_dicts.return_value = data
+        return m
+
+    mock_polars_transformers["transform_to_silver_studies"].return_value = mock_df(
+        [{"source_id": "NCT_HWM", "coreason_id": "CID"}]
+    )
+    for k, m in mock_polars_transformers.items():
+        if k != "transform_to_silver_studies":
+            m.return_value = mock_df([])
+
+    with patch("dlt.current.source_state", return_value={}) as mock_state:
+        source = clinicaltrials_source()
+        list(source.resources["studies_stream"])
+        # Check if state was updated
+        assert mock_state.return_value["last_updated_date"] == "2023-12-31"
+
+
+def test_studies_generator_incremental_auto_filter(
+    mock_client_class: MagicMock, mock_polars_transformers: dict[str, MagicMock]
+) -> None:
+    """Test that query term is automatically generated if state exists."""
+    client_instance = mock_client_class.return_value
+    client_instance.list_studies.return_value = iter([])
+
+    last_date = "2023-01-01"
+
+    with patch("dlt.current.source_state", return_value={"last_updated_date": last_date}):
+        source = clinicaltrials_source()  # No query_term provided
+        list(source.resources["studies_stream"])
+
+        # Verify client called with correct filter
+        expected_term = f"AREA[LastUpdatePostDate]RANGE[{last_date},MAX]"
+        client_instance.list_studies.assert_called_with(page_size=100, query_term=expected_term)
