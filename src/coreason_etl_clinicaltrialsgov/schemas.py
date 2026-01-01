@@ -14,6 +14,12 @@ from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict
 
 
+class GeoPoint(BaseModel):
+    lat: float
+    lon: float
+    model_config = ConfigDict(extra="ignore")
+
+
 class SilverStudy(BaseModel):
     source_id: str
     coreason_id: str
@@ -56,7 +62,7 @@ class SilverLocation(BaseModel):
     zip: Optional[str] = None
     country: Optional[str] = None
     status: Optional[str] = None
-    geo_point: Optional[dict[str, Any]] = None
+    geo_point: Optional[GeoPoint] = None
 
     model_config = ConfigDict(extra="ignore")
 
