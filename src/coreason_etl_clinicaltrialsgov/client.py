@@ -143,6 +143,9 @@ class ClinicalTrialsClient:
         while True:
             data = self.fetch_studies(page_token=next_page_token, page_size=page_size, query_term=query_term)
             studies = data.get("studies", [])
+
+            logger.info(f"Pages Fetched: Retrieved {len(studies)} studies. Next Token: {data.get('nextPageToken')}")
+
             for study in studies:
                 yield study
 
