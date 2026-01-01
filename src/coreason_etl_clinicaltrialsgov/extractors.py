@@ -67,6 +67,7 @@ def clinicaltrials_source(page_size: int = 100, query_term: Optional[str] = None
         # Batch accumulation
         batch_size = page_size  # Use page_size as batch size for Polars processing
         current_batch: list[dict[str, Any]] = []
+        total_records_extracted = 0
 
         def process_batch(batch: list[dict[str, Any]]) -> Iterator[TDataItems]:
             now_ts = datetime.now(timezone.utc).isoformat()
@@ -165,13 +166,22 @@ def clinicaltrials_source(page_size: int = 100, query_term: Optional[str] = None
                     max_date_seen = study_date_str
 
             current_batch.append(raw_study)
+            total_records_extracted += 1
 
             if len(current_batch) >= batch_size:
+                logger.info(
+                    f"Records Extracted: Processing batch of {len(current_batch)}. "
+                    f"Total so far: {total_records_extracted}"
+                )
                 yield from process_batch(current_batch)
                 current_batch = []
 
         # Process remaining
         if current_batch:
+            logger.info(
+                f"Records Extracted: Processing final batch of {len(current_batch)}. "
+                f"Total so far: {total_records_extracted}"
+            )
             yield from process_batch(current_batch)
 
         # Save the new high water mark
