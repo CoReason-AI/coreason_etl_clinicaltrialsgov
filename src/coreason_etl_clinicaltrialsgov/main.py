@@ -35,6 +35,10 @@ def run(
     dataset_name: Annotated[str, typer.Option(help="DLT dataset name")] = "clinical_trials_data",
 ) -> None:
     """Run the ClinicalTrials.gov ETL pipeline."""
+    if page_size <= 0:
+        logger.error(f"Invalid page_size: {page_size}. Must be positive.")
+        raise typer.BadParameter("page_size must be positive")
+
     try:
         # Configure pipeline
         pipeline = dlt.pipeline(
