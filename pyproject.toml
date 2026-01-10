@@ -7,6 +7,9 @@ license = "Prosperity-3.0"
 readme = "README.md"
 packages = [{include = "coreason_etl_clinicaltrialsgov", from = "src"}]
 
+[tool.poetry.scripts]
+coreason-etl-clinicaltrialsgov = "coreason_etl_clinicaltrialsgov.main:app"
+
 [tool.poetry.dependencies]
 python = ">=3.12, <3.15"
 loguru = "^0.7.2"
