@@ -119,7 +119,10 @@ def _safe_get_field(
 
 
 def _gen_sponsor_id_udf(row: dict[str, Any]) -> str:
-    return _generate_surrogate_key_udf(row["nct_id"], row["role"], row["name"])
+    name = row.get("name")
+    if name is not None:
+        name = str(name).strip()
+    return _generate_surrogate_key_udf(row["nct_id"], row["role"], name)
 
 
 def _gen_loc_id_udf(row: dict[str, Any]) -> str:
@@ -275,7 +278,7 @@ def transform_to_silver_sponsors(lf: pl.LazyFrame) -> pl.DataFrame:
                 [
                     pl.col("nct_id"),
                     pl.col("coreason_id"),
-                    pl.col("lead").struct.field("name").alias("name"),
+                    pl.col("lead").struct.field("name").str.strip_chars().alias("name"),
                     pl.col("lead").struct.field("class").alias("agency_class"),
                     pl.lit("LEAD").alias("role"),
                 ]
@@ -300,7 +303,7 @@ def transform_to_silver_sponsors(lf: pl.LazyFrame) -> pl.DataFrame:
                 [
                     pl.col("nct_id"),
                     pl.col("coreason_id"),
-                    pl.col("c_list").struct.field("name").alias("name"),
+                    pl.col("c_list").struct.field("name").str.strip_chars().alias("name"),
                     pl.col("c_list").struct.field("class").alias("agency_class"),
                     pl.lit("COLLABORATOR").alias("role"),
                 ]
