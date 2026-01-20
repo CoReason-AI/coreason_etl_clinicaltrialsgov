@@ -305,25 +305,25 @@ def test_row_udfs() -> None:
 def test_safe_get_field_internals() -> None:
     # 1. Test root column missing
     lf = pl.DataFrame([{"otherCol": "val"}]).lazy()
-    expr = _safe_get_field(lf, "protocolSection", ["id"], "id")
+    expr = _safe_get_field(lf.collect_schema(), "protocolSection", ["id"], "id")
     res = lf.select(expr).collect()
     assert res.item(0, 0) is None
 
     # 2. Test root column exists but path missing
     lf2 = pl.DataFrame([{"protocolSection": {"id": "123"}}]).lazy()
-    expr2 = _safe_get_field(lf2, "protocolSection", ["missingModule", "field"], "field")
+    expr2 = _safe_get_field(lf2.collect_schema(), "protocolSection", ["missingModule", "field"], "field")
     res2 = lf2.select(expr2).collect()
     assert res2.item(0, 0) is None
 
     # 3. Test path exists
-    expr3 = _safe_get_field(lf2, "protocolSection", ["id"], "id")
+    expr3 = _safe_get_field(lf2.collect_schema(), "protocolSection", ["id"], "id")
     res3 = lf2.select(expr3).collect()
     assert res3.item(0, 0) == "123"
 
     # 4. Test path collision with non-struct (nested field on non-struct)
     lf4 = pl.DataFrame([{"protocolSection": {"id": "123"}}]).lazy()
     # 'id' is String. Try to access 'id.subfield'.
-    expr4 = _safe_get_field(lf4, "protocolSection", ["id", "subfield"], "field")
+    expr4 = _safe_get_field(lf4.collect_schema(), "protocolSection", ["id", "subfield"], "field")
     res4 = lf4.select(expr4).collect()
     assert res4.item(0, 0) is None
 
