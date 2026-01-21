@@ -84,15 +84,12 @@ def _generate_surrogate_key_udf(parent_id: str, *parts: Any) -> str:
 
 
 def _safe_get_field(
-    lf: pl.LazyFrame, root_col: str, path: list[str], alias: str, dtype: pl.DataType = DEFAULT_STRING_TYPE
+    schema: pl.Schema, root_col: str, path: list[str], alias: str, dtype: pl.DataType = DEFAULT_STRING_TYPE
 ) -> pl.Expr:
     """
     Checks if the path exists in the LazyFrame schema. If so, returns the field expression.
     If not, returns a null literal with the alias.
     """
-    schema = lf.collect_schema()
-
-    # Using Any to avoid complex union types with Polars internals (DataType vs DataTypeClass)
     curr_type: Any = schema.get(root_col)
 
     if curr_type is None:
@@ -118,8 +115,28 @@ def _safe_get_field(
     return expr.alias(alias)
 
 
+def _safe_struct_field(
+    col_name: str,
+    field_name: str,
+    struct_dtype: pl.DataType,
+    alias: str,
+    return_dtype: pl.DataType = DEFAULT_STRING_TYPE,
+) -> pl.Expr:
+    """
+    Checks if a field exists in a Struct dtype. If so, extracts it.
+    If not, returns null literal.
+    """
+    if isinstance(struct_dtype, pl.Struct):
+        if any(f.name == field_name for f in struct_dtype.fields):
+            return pl.col(col_name).struct.field(field_name).alias(alias)
+    return pl.lit(None, dtype=return_dtype).alias(alias)
+
+
 def _gen_sponsor_id_udf(row: dict[str, Any]) -> str:
-    return _generate_surrogate_key_udf(row["nct_id"], row["role"], row["name"])
+    name = row.get("name")
+    if name is not None:
+        name = str(name).strip()
+    return _generate_surrogate_key_udf(row["nct_id"], row["role"], name)
 
 
 def _gen_loc_id_udf(row: dict[str, Any]) -> str:
@@ -143,9 +160,10 @@ def _gen_ref_id_udf(row: dict[str, Any]) -> str:
 
 def transform_to_silver_studies(lf: pl.LazyFrame) -> pl.DataFrame:
     """Transform to Silver Studies."""
+    schema = lf.collect_schema()
 
     def get(path: list[str], alias: str, dtype: pl.DataType = DEFAULT_STRING_TYPE) -> pl.Expr:
-        return _safe_get_field(lf, "protocolSection", path, alias, dtype)
+        return _safe_get_field(schema, "protocolSection", path, alias, dtype)
 
     base = lf.select(
         [
@@ -215,15 +233,17 @@ def transform_to_silver_studies(lf: pl.LazyFrame) -> pl.DataFrame:
 
 
 def transform_to_silver_sponsors(lf: pl.LazyFrame) -> pl.DataFrame:
+    schema = lf.collect_schema()
+
     def get(path: list[str], alias: str, dtype: pl.DataType = DEFAULT_STRING_TYPE) -> pl.Expr:
-        return _safe_get_field(lf, "protocolSection", path, alias, dtype)
+        return _safe_get_field(schema, "protocolSection", path, alias, dtype)
 
     base = lf.select(
         [
             get(["identificationModule", "nctId"], "nct_id"),
             get(["statusModule", "studyFirstPostDateStruct", "date"], "first_received_date"),
             _safe_get_field(
-                lf,
+                schema,
                 "protocolSection",
                 ["sponsorCollaboratorsModule"],
                 "sponsors_mod",
@@ -275,7 +295,7 @@ def transform_to_silver_sponsors(lf: pl.LazyFrame) -> pl.DataFrame:
                 [
                     pl.col("nct_id"),
                     pl.col("coreason_id"),
-                    pl.col("lead").struct.field("name").alias("name"),
+                    pl.col("lead").struct.field("name").str.strip_chars().alias("name"),
                     pl.col("lead").struct.field("class").alias("agency_class"),
                     pl.lit("LEAD").alias("role"),
                 ]
@@ -300,7 +320,7 @@ def transform_to_silver_sponsors(lf: pl.LazyFrame) -> pl.DataFrame:
                 [
                     pl.col("nct_id"),
                     pl.col("coreason_id"),
-                    pl.col("c_list").struct.field("name").alias("name"),
+                    pl.col("c_list").struct.field("name").str.strip_chars().alias("name"),
                     pl.col("c_list").struct.field("class").alias("agency_class"),
                     pl.lit("COLLABORATOR").alias("role"),
                 ]
@@ -350,14 +370,15 @@ def transform_to_silver_sponsors(lf: pl.LazyFrame) -> pl.DataFrame:
 
 
 def transform_to_silver_locations(lf: pl.LazyFrame) -> pl.DataFrame:
+    schema = lf.collect_schema()
     base = lf.select(
         [
-            _safe_get_field(lf, "protocolSection", ["identificationModule", "nctId"], "nct_id"),
+            _safe_get_field(schema, "protocolSection", ["identificationModule", "nctId"], "nct_id"),
             _safe_get_field(
-                lf, "protocolSection", ["statusModule", "studyFirstPostDateStruct", "date"], "first_received_date"
+                schema, "protocolSection", ["statusModule", "studyFirstPostDateStruct", "date"], "first_received_date"
             ),
             _safe_get_field(
-                lf,
+                schema,
                 "protocolSection",
                 ["contactsLocationsModule", "locations"],
                 "locations",
@@ -391,25 +412,20 @@ def transform_to_silver_locations(lf: pl.LazyFrame) -> pl.DataFrame:
     ex_schema = exploded.collect_schema()
     loc_dtype = ex_schema.get("locations")
 
-    def safe_extract(col_name: str, field: str, alias: str, dtype: pl.DataType = DEFAULT_STRING_TYPE) -> pl.Expr:
-        if isinstance(loc_dtype, pl.Struct):
-            if any(f.name == field for f in loc_dtype.fields):
-                return pl.col(col_name).struct.field(field).alias(alias)
-        return pl.lit(None, dtype=dtype).alias(alias)
-
     df = exploded.select(
         [
             pl.col("nct_id"),
             pl.col("coreason_id"),
-            safe_extract("locations", "facility", "facility"),
-            safe_extract("locations", "city", "city"),
-            safe_extract("locations", "state", "state"),
-            safe_extract("locations", "country", "country"),
-            safe_extract("locations", "zip", "zip"),
-            safe_extract("locations", "status", "status"),
-            safe_extract(
+            _safe_struct_field("locations", "facility", loc_dtype, "facility"),
+            _safe_struct_field("locations", "city", loc_dtype, "city"),
+            _safe_struct_field("locations", "state", loc_dtype, "state"),
+            _safe_struct_field("locations", "country", loc_dtype, "country"),
+            _safe_struct_field("locations", "zip", loc_dtype, "zip"),
+            _safe_struct_field("locations", "status", loc_dtype, "status"),
+            _safe_struct_field(
                 "locations",
                 "geoPoint",
+                loc_dtype,
                 "geo_point",
                 pl.Struct([pl.Field("lat", pl.Float64), pl.Field("lon", pl.Float64)]),
             ),
@@ -443,14 +459,15 @@ def transform_to_silver_locations(lf: pl.LazyFrame) -> pl.DataFrame:
 
 
 def transform_to_silver_interventions(lf: pl.LazyFrame) -> pl.DataFrame:
+    schema = lf.collect_schema()
     base = lf.select(
         [
-            _safe_get_field(lf, "protocolSection", ["identificationModule", "nctId"], "nct_id"),
+            _safe_get_field(schema, "protocolSection", ["identificationModule", "nctId"], "nct_id"),
             _safe_get_field(
-                lf, "protocolSection", ["statusModule", "studyFirstPostDateStruct", "date"], "first_received_date"
+                schema, "protocolSection", ["statusModule", "studyFirstPostDateStruct", "date"], "first_received_date"
             ),
             _safe_get_field(
-                lf,
+                schema,
                 "protocolSection",
                 ["armsInterventionsModule", "interventions"],
                 "interventions",
@@ -481,20 +498,14 @@ def transform_to_silver_interventions(lf: pl.LazyFrame) -> pl.DataFrame:
     ex_schema = exploded.collect_schema()
     int_dtype = ex_schema.get("interventions")
 
-    def safe_extract(field: str, alias: str, dtype: pl.DataType = DEFAULT_STRING_TYPE) -> pl.Expr:
-        if isinstance(int_dtype, pl.Struct):
-            if any(f.name == field for f in int_dtype.fields):
-                return pl.col("interventions").struct.field(field).alias(alias)
-        return pl.lit(None, dtype=dtype).alias(alias)
-
     df = exploded.select(
         [
             pl.col("nct_id"),
             pl.col("coreason_id"),
-            safe_extract("type", "type"),
-            safe_extract("name", "name"),
-            safe_extract("description", "description"),
-            safe_extract("otherNames", "other_names", pl.List(pl.String)),
+            _safe_struct_field("interventions", "type", int_dtype, "type"),
+            _safe_struct_field("interventions", "name", int_dtype, "name"),
+            _safe_struct_field("interventions", "description", int_dtype, "description"),
+            _safe_struct_field("interventions", "otherNames", int_dtype, "other_names", pl.List(pl.String)),
         ]
     ).collect()
 
@@ -520,13 +531,14 @@ def transform_to_silver_interventions(lf: pl.LazyFrame) -> pl.DataFrame:
 
 
 def transform_to_silver_outcomes(lf: pl.LazyFrame) -> pl.DataFrame:
+    schema = lf.collect_schema()
     base = lf.select(
         [
-            _safe_get_field(lf, "protocolSection", ["identificationModule", "nctId"], "nct_id"),
+            _safe_get_field(schema, "protocolSection", ["identificationModule", "nctId"], "nct_id"),
             _safe_get_field(
-                lf, "protocolSection", ["statusModule", "studyFirstPostDateStruct", "date"], "first_received_date"
+                schema, "protocolSection", ["statusModule", "studyFirstPostDateStruct", "date"], "first_received_date"
             ),
-            _safe_get_field(lf, "protocolSection", ["outcomesModule"], "outcomes_mod"),
+            _safe_get_field(schema, "protocolSection", ["outcomesModule"], "outcomes_mod"),
         ]
     ).filter(pl.col("nct_id").is_not_null())
 
@@ -567,19 +579,14 @@ def transform_to_silver_outcomes(lf: pl.LazyFrame) -> pl.DataFrame:
         ex_schema = exploded.collect_schema()
         o_dtype = ex_schema.get("outcomes")
 
-        def safe_ex(f: str, alias: str) -> pl.Expr:
-            if isinstance(o_dtype, pl.Struct) and any(x.name == f for x in o_dtype.fields):
-                return pl.col("outcomes").struct.field(f).alias(alias)
-            return pl.lit(None, pl.String).alias(alias)
-
         return exploded.select(
             [
                 pl.col("nct_id"),
                 pl.col("coreason_id"),
                 pl.lit(outcome_type_label).alias("outcome_type"),
-                safe_ex("measure", "measure"),
-                safe_ex("timeFrame", "time_frame"),
-                safe_ex("description", "description"),
+                _safe_struct_field("outcomes", "measure", o_dtype, "measure"),
+                _safe_struct_field("outcomes", "timeFrame", o_dtype, "time_frame"),
+                _safe_struct_field("outcomes", "description", o_dtype, "description"),
             ]
         ).collect()
 
@@ -631,15 +638,16 @@ def transform_to_silver_outcomes(lf: pl.LazyFrame) -> pl.DataFrame:
 
 
 def transform_to_silver_references(lf: pl.LazyFrame) -> pl.DataFrame:
+    schema = lf.collect_schema()
     base = lf.select(
         [
-            _safe_get_field(lf, "protocolSection", ["identificationModule", "nctId"], "nct_id"),
+            _safe_get_field(schema, "protocolSection", ["identificationModule", "nctId"], "nct_id"),
             _safe_get_field(
-                lf, "protocolSection", ["statusModule", "studyFirstPostDateStruct", "date"], "first_received_date"
+                schema, "protocolSection", ["statusModule", "studyFirstPostDateStruct", "date"], "first_received_date"
             ),
             # Fixed: pass dtype as List so missing fields return empty list-like null, not string null
             _safe_get_field(
-                lf,
+                schema,
                 "protocolSection",
                 ["referencesModule", "references"],
                 "references",
@@ -669,18 +677,19 @@ def transform_to_silver_references(lf: pl.LazyFrame) -> pl.DataFrame:
     ex_schema = exploded.collect_schema()
     ref_dtype = ex_schema.get("references")
 
-    def safe_ex(f: str, alias: str, dtype: pl.DataType = DEFAULT_STRING_TYPE) -> pl.Expr:
-        if isinstance(ref_dtype, pl.Struct) and any(x.name == f for x in ref_dtype.fields):
-            return pl.col("references").struct.field(f).alias(alias)
-        return pl.lit(None, dtype).alias(alias)
-
     df = exploded.select(
         [
             pl.col("nct_id"),
             pl.col("coreason_id"),
-            safe_ex("pmid", "pmid"),
-            safe_ex("citation", "citation"),
-            safe_ex("retraction", "retraction", pl.Struct([pl.Field("retraction", pl.Boolean)])),
+            _safe_struct_field("references", "pmid", ref_dtype, "pmid"),
+            _safe_struct_field("references", "citation", ref_dtype, "citation"),
+            _safe_struct_field(
+                "references",
+                "retraction",
+                ref_dtype,
+                "retraction",
+                pl.Struct([pl.Field("retraction", pl.Boolean)]),
+            ),
             pl.lit("REFERENCE").alias("type"),
         ]
     ).collect()

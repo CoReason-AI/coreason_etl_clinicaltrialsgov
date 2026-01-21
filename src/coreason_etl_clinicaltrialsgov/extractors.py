@@ -77,7 +77,7 @@ def clinicaltrials_source(page_size: int = 100, query_term: Optional[str] = None
                 nct_id = raw_study.get("protocolSection", {}).get("identificationModule", {}).get("nctId")
                 bronze_record = {"source_id": nct_id, "ingestion_ts": now_ts, "raw_payload": raw_study}
                 yield dlt.mark.with_hints(
-                    dlt.mark.with_table_name(bronze_record, "bronze_studies"),
+                    dlt.mark.with_table_name(bronze_record, "bronze.clinicaltrials_studies"),
                     dlt.mark.make_hints(write_disposition="merge", primary_key="source_id"),
                 )
 
@@ -100,12 +100,12 @@ def clinicaltrials_source(page_size: int = 100, query_term: Optional[str] = None
 
             # Map DataFrames to Table Names and Pydantic Models
             silver_map: dict[str, tuple[pl.DataFrame, Type[BaseModel]]] = {
-                "silver_studies": (df_studies, SilverStudy),
-                "silver_sponsors": (df_sponsors, SilverSponsor),
-                "silver_locations": (df_locations, SilverLocation),
-                "silver_interventions": (df_interventions, SilverIntervention),
-                "silver_outcomes": (df_outcomes, SilverOutcome),
-                "silver_references": (df_references, SilverReference),
+                "silver.clinicaltrials_studies": (df_studies, SilverStudy),
+                "silver.clinicaltrials_sponsors": (df_sponsors, SilverSponsor),
+                "silver.clinicaltrials_locations": (df_locations, SilverLocation),
+                "silver.clinicaltrials_interventions": (df_interventions, SilverIntervention),
+                "silver.clinicaltrials_outcomes": (df_outcomes, SilverOutcome),
+                "silver.clinicaltrials_references": (df_references, SilverReference),
             }
 
             # Prepare lookup for Gold transformation (need Silver Study + Locations per NCT ID)
@@ -124,7 +124,7 @@ def clinicaltrials_source(page_size: int = 100, query_term: Optional[str] = None
 
             # Yield Silver Records with Strict Validation
             for table_name, (df, model_class) in silver_map.items():
-                pk = "source_id" if table_name == "silver_studies" else "id"
+                pk = "source_id" if table_name == "silver.clinicaltrials_studies" else "id"
                 for record in df.to_dicts():
                     # Validate via Pydantic
                     # This raises ValidationError if schema is violated
@@ -149,7 +149,7 @@ def clinicaltrials_source(page_size: int = 100, query_term: Optional[str] = None
                 gold_record = transform_gold(raw_study, silver_study, silver_locs)
                 if gold_record:
                     yield dlt.mark.with_hints(
-                        dlt.mark.with_table_name(gold_record, "gold_studies"),
+                        dlt.mark.with_table_name(gold_record, "gold.clinicaltrials_studies"),
                         dlt.mark.make_hints(write_disposition="merge", primary_key="source_id"),
                     )
 
