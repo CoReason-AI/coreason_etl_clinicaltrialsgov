@@ -774,9 +774,18 @@ def transform_to_silver_officials(lf: pl.LazyFrame) -> pl.DataFrame:
             [
                 pl.col("nct_id"),
                 pl.col("coreason_id"),
-                _safe_struct_field("officials", "name", o_dtype, "name"),
-                _safe_struct_field("officials", "role", o_dtype, "role"),
-                _safe_struct_field("officials", "affiliation", o_dtype, "affiliation"),
+                _safe_struct_field("officials", "name", o_dtype, "name")
+                .cast(pl.String)
+                .str.strip_chars()
+                .alias("name"),
+                _safe_struct_field("officials", "role", o_dtype, "role")
+                .cast(pl.String)
+                .str.strip_chars()
+                .alias("role"),
+                _safe_struct_field("officials", "affiliation", o_dtype, "affiliation")
+                .cast(pl.String)
+                .str.strip_chars()
+                .alias("affiliation"),
                 pl.lit(None, dtype=DEFAULT_STRING_TYPE).alias("phone"),
                 pl.lit(None, dtype=DEFAULT_STRING_TYPE).alias("email"),
             ]
@@ -811,11 +820,17 @@ def transform_to_silver_officials(lf: pl.LazyFrame) -> pl.DataFrame:
             [
                 pl.col("nct_id"),
                 pl.col("coreason_id"),
-                _safe_struct_field("contacts", "name", c_dtype, "name"),
-                _safe_struct_field("contacts", "role", c_dtype, "role"),
+                _safe_struct_field("contacts", "name", c_dtype, "name").cast(pl.String).str.strip_chars().alias("name"),
+                _safe_struct_field("contacts", "role", c_dtype, "role").cast(pl.String).str.strip_chars().alias("role"),
                 pl.lit(None, dtype=DEFAULT_STRING_TYPE).alias("affiliation"),
-                _safe_struct_field("contacts", "phone", c_dtype, "phone"),
-                _safe_struct_field("contacts", "email", c_dtype, "email"),
+                _safe_struct_field("contacts", "phone", c_dtype, "phone")
+                .cast(pl.String)
+                .str.strip_chars()
+                .alias("phone"),
+                _safe_struct_field("contacts", "email", c_dtype, "email")
+                .cast(pl.String)
+                .str.strip_chars()
+                .alias("email"),
             ]
         ).collect()
 
