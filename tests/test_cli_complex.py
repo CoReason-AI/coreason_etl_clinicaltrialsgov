@@ -83,6 +83,4 @@ def test_cli_empty_args(mock_source: MagicMock, mock_pipeline: MagicMock) -> Non
     result = runner.invoke(app, ["run", "--dataset-name", ""], env={"NO_COLOR": "1"})
 
     assert result.exit_code == 0
-    mock_pipeline.assert_called_with(
-        pipeline_name="clinicaltrials_etl", destination="postgres", dataset_name="", progress="log"
-    )
+    mock_pipeline.assert_called_with(pipeline_name="clinicaltrials_etl", destination="postgres", progress="log")

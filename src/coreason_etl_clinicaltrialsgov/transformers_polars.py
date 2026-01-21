@@ -9,7 +9,7 @@
 # Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
 
 import uuid
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import polars as pl
 
@@ -155,26 +155,65 @@ def _gen_ref_id_udf(row: dict[str, Any]) -> str:
     return _generate_surrogate_key_udf(row["nct_id"], row["pmid"], row["citation"])
 
 
+def _gen_official_id_udf(row: dict[str, Any]) -> str:
+    name = row.get("name")
+    if name is not None:
+        name = str(name).strip()
+    return _generate_surrogate_key_udf(row["nct_id"], name, row.get("role"), row.get("affiliation"))
+
+
+def _prepare_silver_base(lf: pl.LazyFrame, select_func: Callable[[pl.Schema], list[pl.Expr]]) -> pl.LazyFrame:
+    """
+    Prepare the base LazyFrame for Silver transformations.
+
+    1. Collects schema to safely access fields.
+    2. Selects nct_id, first_received_date, and module-specific fields.
+    3. Filters out records without nct_id.
+    4. Adds coreason_id.
+    """
+    schema = lf.collect_schema()
+
+    base_exprs = [
+        _safe_get_field(schema, "protocolSection", ["identificationModule", "nctId"], "nct_id"),
+        _safe_get_field(
+            schema, "protocolSection", ["statusModule", "studyFirstPostDateStruct", "date"], "first_received_date"
+        ),
+    ]
+
+    # Get specific fields
+    extra_exprs = select_func(schema)
+
+    return (
+        lf.select(base_exprs + extra_exprs)
+        .filter(pl.col("nct_id").is_not_null())
+        .with_columns(
+            pl.struct(["nct_id", "first_received_date"])
+            .map_elements(
+                lambda x: _generate_coreason_id_udf(x["nct_id"], x["first_received_date"]),
+                return_dtype=pl.String,
+            )
+            .alias("coreason_id")
+        )
+    )
+
+
 # --- Transformers ---
 
 
 def transform_to_silver_studies(lf: pl.LazyFrame) -> pl.DataFrame:
     """Transform to Silver Studies."""
-    schema = lf.collect_schema()
 
-    def get(path: list[str], alias: str, dtype: pl.DataType = DEFAULT_STRING_TYPE) -> pl.Expr:
-        return _safe_get_field(schema, "protocolSection", path, alias, dtype)
+    def selector(schema: pl.Schema) -> list[pl.Expr]:
+        def get(path: list[str], alias: str, dtype: pl.DataType = DEFAULT_STRING_TYPE) -> pl.Expr:
+            return _safe_get_field(schema, "protocolSection", path, alias, dtype)
 
-    base = lf.select(
-        [
-            get(["identificationModule", "nctId"], "nct_id"),
+        return [
             get(["identificationModule", "briefTitle"], "title"),
             get(["identificationModule", "officialTitle"], "official_title"),
             get(["identificationModule", "orgStudyIdInfo", "id"], "org_study_id"),
             get(["statusModule", "overallStatus"], "overall_status"),
             get(["statusModule", "startDateStruct", "date"], "start_date_raw"),
             get(["statusModule", "completionDateStruct", "date"], "completion_date_raw"),
-            get(["statusModule", "studyFirstPostDateStruct", "date"], "first_received_date"),
             get(["designModule", "phases"], "phases_list", pl.List(pl.String())),
             get(["designModule", "studyType"], "study_type"),
             get(["designModule", "enrollmentInfo", "count"], "enrollment_count", pl.Int64()),
@@ -184,11 +223,11 @@ def transform_to_silver_studies(lf: pl.LazyFrame) -> pl.DataFrame:
             get(["eligibilityModule", "sex"], "sex"),
             get(["eligibilityModule", "healthyVolunteers"], "accepted_healthy_volunteers", pl.Boolean()),
         ]
-    )
+
+    base = _prepare_silver_base(lf, selector)
 
     return (
-        base.filter(pl.col("nct_id").is_not_null())
-        .with_columns(
+        base.with_columns(
             [
                 pl.col("start_date_raw")
                 .map_elements(_parse_date_udf, return_dtype=pl.String)
@@ -201,11 +240,6 @@ def transform_to_silver_studies(lf: pl.LazyFrame) -> pl.DataFrame:
                 pl.col("phases_list").list.sort().list.join("|").alias("phases"),
                 pl.col("min_age_raw").map_elements(_normalize_age_udf, return_dtype=pl.Float64).alias("min_age"),
                 pl.col("max_age_raw").map_elements(_normalize_age_udf, return_dtype=pl.Float64).alias("max_age"),
-                pl.struct(["nct_id", "first_received_date"])
-                .map_elements(
-                    lambda x: _generate_coreason_id_udf(x["nct_id"], x["first_received_date"]), return_dtype=pl.String
-                )
-                .alias("coreason_id"),
             ]
         )
         .select(
@@ -233,15 +267,8 @@ def transform_to_silver_studies(lf: pl.LazyFrame) -> pl.DataFrame:
 
 
 def transform_to_silver_sponsors(lf: pl.LazyFrame) -> pl.DataFrame:
-    schema = lf.collect_schema()
-
-    def get(path: list[str], alias: str, dtype: pl.DataType = DEFAULT_STRING_TYPE) -> pl.Expr:
-        return _safe_get_field(schema, "protocolSection", path, alias, dtype)
-
-    base = lf.select(
-        [
-            get(["identificationModule", "nctId"], "nct_id"),
-            get(["statusModule", "studyFirstPostDateStruct", "date"], "first_received_date"),
+    def selector(schema: pl.Schema) -> list[pl.Expr]:
+        return [
             _safe_get_field(
                 schema,
                 "protocolSection",
@@ -256,17 +283,10 @@ def transform_to_silver_sponsors(lf: pl.LazyFrame) -> pl.DataFrame:
                         ),
                     ]
                 ),
-            ),
+            )
         ]
-    ).filter(pl.col("nct_id").is_not_null())
 
-    base = base.with_columns(
-        pl.struct(["nct_id", "first_received_date"])
-        .map_elements(
-            lambda x: _generate_coreason_id_udf(x["nct_id"], x["first_received_date"]), return_dtype=pl.String
-        )
-        .alias("coreason_id")
-    )
+    base = _prepare_silver_base(lf, selector)
 
     base_schema = base.collect_schema()
     s_mod_dtype = base_schema.get("sponsors_mod")
@@ -335,7 +355,7 @@ def transform_to_silver_sponsors(lf: pl.LazyFrame) -> pl.DataFrame:
         to_concat.append(collabs[0].collect())
 
     if not to_concat:
-        # Fallback schema if completely missing from source
+        # Fallback schema
         return pl.DataFrame(
             schema={
                 "id": pl.String,
@@ -370,13 +390,8 @@ def transform_to_silver_sponsors(lf: pl.LazyFrame) -> pl.DataFrame:
 
 
 def transform_to_silver_locations(lf: pl.LazyFrame) -> pl.DataFrame:
-    schema = lf.collect_schema()
-    base = lf.select(
-        [
-            _safe_get_field(schema, "protocolSection", ["identificationModule", "nctId"], "nct_id"),
-            _safe_get_field(
-                schema, "protocolSection", ["statusModule", "studyFirstPostDateStruct", "date"], "first_received_date"
-            ),
+    def selector(schema: pl.Schema) -> list[pl.Expr]:
+        return [
             _safe_get_field(
                 schema,
                 "protocolSection",
@@ -395,17 +410,10 @@ def transform_to_silver_locations(lf: pl.LazyFrame) -> pl.DataFrame:
                         ]
                     )
                 ),
-            ),
+            )
         ]
-    ).filter(pl.col("nct_id").is_not_null())
 
-    base = base.with_columns(
-        pl.struct(["nct_id", "first_received_date"])
-        .map_elements(
-            lambda x: _generate_coreason_id_udf(x["nct_id"], x["first_received_date"]), return_dtype=pl.String
-        )
-        .alias("coreason_id")
-    )
+    base = _prepare_silver_base(lf, selector)
 
     exploded = base.explode("locations").filter(pl.col("locations").is_not_null())
 
@@ -459,13 +467,8 @@ def transform_to_silver_locations(lf: pl.LazyFrame) -> pl.DataFrame:
 
 
 def transform_to_silver_interventions(lf: pl.LazyFrame) -> pl.DataFrame:
-    schema = lf.collect_schema()
-    base = lf.select(
-        [
-            _safe_get_field(schema, "protocolSection", ["identificationModule", "nctId"], "nct_id"),
-            _safe_get_field(
-                schema, "protocolSection", ["statusModule", "studyFirstPostDateStruct", "date"], "first_received_date"
-            ),
+    def selector(schema: pl.Schema) -> list[pl.Expr]:
+        return [
             _safe_get_field(
                 schema,
                 "protocolSection",
@@ -481,17 +484,10 @@ def transform_to_silver_interventions(lf: pl.LazyFrame) -> pl.DataFrame:
                         ]
                     )
                 ),
-            ),
+            )
         ]
-    ).filter(pl.col("nct_id").is_not_null())
 
-    base = base.with_columns(
-        pl.struct(["nct_id", "first_received_date"])
-        .map_elements(
-            lambda x: _generate_coreason_id_udf(x["nct_id"], x["first_received_date"]), return_dtype=pl.String
-        )
-        .alias("coreason_id")
-    )
+    base = _prepare_silver_base(lf, selector)
 
     exploded = base.explode("interventions").filter(pl.col("interventions").is_not_null())
 
@@ -531,24 +527,10 @@ def transform_to_silver_interventions(lf: pl.LazyFrame) -> pl.DataFrame:
 
 
 def transform_to_silver_outcomes(lf: pl.LazyFrame) -> pl.DataFrame:
-    schema = lf.collect_schema()
-    base = lf.select(
-        [
-            _safe_get_field(schema, "protocolSection", ["identificationModule", "nctId"], "nct_id"),
-            _safe_get_field(
-                schema, "protocolSection", ["statusModule", "studyFirstPostDateStruct", "date"], "first_received_date"
-            ),
-            _safe_get_field(schema, "protocolSection", ["outcomesModule"], "outcomes_mod"),
-        ]
-    ).filter(pl.col("nct_id").is_not_null())
+    def selector(schema: pl.Schema) -> list[pl.Expr]:
+        return [_safe_get_field(schema, "protocolSection", ["outcomesModule"], "outcomes_mod")]
 
-    base = base.with_columns(
-        pl.struct(["nct_id", "first_received_date"])
-        .map_elements(
-            lambda x: _generate_coreason_id_udf(x["nct_id"], x["first_received_date"]), return_dtype=pl.String
-        )
-        .alias("coreason_id")
-    )
+    base = _prepare_silver_base(lf, selector)
 
     base_schema = base.collect_schema()
     mod_dtype = base_schema.get("outcomes_mod")
@@ -638,14 +620,8 @@ def transform_to_silver_outcomes(lf: pl.LazyFrame) -> pl.DataFrame:
 
 
 def transform_to_silver_references(lf: pl.LazyFrame) -> pl.DataFrame:
-    schema = lf.collect_schema()
-    base = lf.select(
-        [
-            _safe_get_field(schema, "protocolSection", ["identificationModule", "nctId"], "nct_id"),
-            _safe_get_field(
-                schema, "protocolSection", ["statusModule", "studyFirstPostDateStruct", "date"], "first_received_date"
-            ),
-            # Fixed: pass dtype as List so missing fields return empty list-like null, not string null
+    def selector(schema: pl.Schema) -> list[pl.Expr]:
+        return [
             _safe_get_field(
                 schema,
                 "protocolSection",
@@ -660,17 +636,10 @@ def transform_to_silver_references(lf: pl.LazyFrame) -> pl.DataFrame:
                         ]
                     )
                 ),
-            ),
+            )
         ]
-    ).filter(pl.col("nct_id").is_not_null())
 
-    base = base.with_columns(
-        pl.struct(["nct_id", "first_received_date"])
-        .map_elements(
-            lambda x: _generate_coreason_id_udf(x["nct_id"], x["first_received_date"]), return_dtype=pl.String
-        )
-        .alias("coreason_id")
-    )
+    base = _prepare_silver_base(lf, selector)
 
     exploded = base.explode("references").filter(pl.col("references").is_not_null())
 
@@ -710,6 +679,146 @@ def transform_to_silver_references(lf: pl.LazyFrame) -> pl.DataFrame:
                 pl.col("pmid"),
                 pl.col("citation"),
                 pl.col("retraction"),
+            ]
+        )
+        .collect()
+    )
+
+
+def transform_to_silver_officials(lf: pl.LazyFrame) -> pl.DataFrame:
+    def selector(schema: pl.Schema) -> list[pl.Expr]:
+        return [_safe_get_field(schema, "protocolSection", ["contactsLocationsModule"], "contacts_mod")]
+
+    base = _prepare_silver_base(lf, selector)
+
+    base_schema = base.collect_schema()
+    mod_dtype = base_schema.get("contacts_mod")
+
+    dfs = []
+
+    # 1. Overall Officials
+    has_officials = False
+    if isinstance(mod_dtype, pl.Struct):
+        if any(f.name == "overallOfficials" for f in mod_dtype.fields):
+            has_officials = True
+
+    if has_officials:
+        exploded = (
+            base.select(
+                [
+                    pl.col("nct_id"),
+                    pl.col("coreason_id"),
+                    pl.col("contacts_mod").struct.field("overallOfficials").alias("officials"),
+                ]
+            )
+            .filter(pl.col("officials").is_not_null())
+            .explode("officials")
+        )
+
+        ex_schema = exploded.collect_schema()
+        o_dtype = ex_schema.get("officials")
+
+        df_off = exploded.select(
+            [
+                pl.col("nct_id"),
+                pl.col("coreason_id"),
+                _safe_struct_field("officials", "name", o_dtype, "name")
+                .cast(pl.String)
+                .str.strip_chars()
+                .alias("name"),
+                _safe_struct_field("officials", "role", o_dtype, "role")
+                .cast(pl.String)
+                .str.strip_chars()
+                .alias("role"),
+                _safe_struct_field("officials", "affiliation", o_dtype, "affiliation")
+                .cast(pl.String)
+                .str.strip_chars()
+                .alias("affiliation"),
+                pl.lit(None, dtype=DEFAULT_STRING_TYPE).alias("phone"),
+                pl.lit(None, dtype=DEFAULT_STRING_TYPE).alias("email"),
+            ]
+        ).collect()
+
+        if df_off.height > 0:
+            dfs.append(df_off)
+
+    # 2. Central Contacts
+    has_contacts = False
+    if isinstance(mod_dtype, pl.Struct):
+        if any(f.name == "centralContacts" for f in mod_dtype.fields):
+            has_contacts = True
+
+    if has_contacts:
+        exploded = (
+            base.select(
+                [
+                    pl.col("nct_id"),
+                    pl.col("coreason_id"),
+                    pl.col("contacts_mod").struct.field("centralContacts").alias("contacts"),
+                ]
+            )
+            .filter(pl.col("contacts").is_not_null())
+            .explode("contacts")
+        )
+
+        ex_schema = exploded.collect_schema()
+        c_dtype = ex_schema.get("contacts")
+
+        df_con = exploded.select(
+            [
+                pl.col("nct_id"),
+                pl.col("coreason_id"),
+                _safe_struct_field("contacts", "name", c_dtype, "name").cast(pl.String).str.strip_chars().alias("name"),
+                _safe_struct_field("contacts", "role", c_dtype, "role").cast(pl.String).str.strip_chars().alias("role"),
+                pl.lit(None, dtype=DEFAULT_STRING_TYPE).alias("affiliation"),
+                _safe_struct_field("contacts", "phone", c_dtype, "phone")
+                .cast(pl.String)
+                .str.strip_chars()
+                .alias("phone"),
+                _safe_struct_field("contacts", "email", c_dtype, "email")
+                .cast(pl.String)
+                .str.strip_chars()
+                .alias("email"),
+            ]
+        ).collect()
+
+        if df_con.height > 0:
+            dfs.append(df_con)
+
+    if not dfs:
+        return pl.DataFrame(
+            schema={
+                "id": pl.String,
+                "source_id": pl.String,
+                "coreason_id": pl.String,
+                "name": pl.String,
+                "role": pl.String,
+                "affiliation": pl.String,
+                "phone": pl.String,
+                "email": pl.String,
+            }
+        )
+
+    combined = pl.concat(dfs)
+
+    return (
+        combined.lazy()
+        .with_columns(
+            pl.struct(["nct_id", "name", "role", "affiliation"])
+            .map_elements(_gen_official_id_udf, return_dtype=pl.String)
+            .alias("id")
+        )
+        .unique(subset=["id"], keep="first")
+        .select(
+            [
+                pl.col("id"),
+                pl.col("nct_id").alias("source_id"),
+                pl.col("coreason_id"),
+                pl.col("name"),
+                pl.col("role"),
+                pl.col("affiliation"),
+                pl.col("phone"),
+                pl.col("email"),
             ]
         )
         .collect()
