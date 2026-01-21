@@ -80,7 +80,7 @@ poetry run coreason-etl-clinicaltrialsgov run
 | `--query-term`    | `None`                 | Optional filter (e.g., `heart attack`).          |
 | `--destination`   | `postgres`             | DLT destination (e.g., `postgres`, `duckdb`).    |
 | `--pipeline-name` | `clinicaltrials_etl`   | Name of the DLT pipeline.                        |
-| `--dataset-name`  | `clinical_trials_data` | Target dataset name in the database.             |
+| `--dataset-name`  | `None`                 | Target dataset name (defaults to pipeline name). |
 
 **Example:**
 ```sh
