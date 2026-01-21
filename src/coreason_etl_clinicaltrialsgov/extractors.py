@@ -9,7 +9,7 @@
 # Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
 
 from datetime import datetime, timezone
-from typing import Any, Iterator, Optional, Type
+from typing import Any, Callable, Iterator, NamedTuple, Optional, Type
 
 import dlt
 import polars as pl
@@ -38,6 +38,24 @@ from coreason_etl_clinicaltrialsgov.transformers_polars import (
     transform_to_silver_sponsors,
     transform_to_silver_studies,
 )
+
+
+class SilverResource(NamedTuple):
+    name: str
+    transformer: Callable[[pl.LazyFrame], pl.DataFrame]
+    model: Type[BaseModel]
+    primary_key: str = "id"
+
+
+SILVER_RESOURCES = [
+    SilverResource("silver_clinicaltrials_studies", transform_to_silver_studies, SilverStudy, "source_id"),
+    SilverResource("silver_clinicaltrials_sponsors", transform_to_silver_sponsors, SilverSponsor),
+    SilverResource("silver_clinicaltrials_locations", transform_to_silver_locations, SilverLocation),
+    SilverResource("silver_clinicaltrials_interventions", transform_to_silver_interventions, SilverIntervention),
+    SilverResource("silver_clinicaltrials_outcomes", transform_to_silver_outcomes, SilverOutcome),
+    SilverResource("silver_clinicaltrials_references", transform_to_silver_references, SilverReference),
+    SilverResource("silver_clinicaltrials_officials", transform_to_silver_officials, SilverOfficial),
+]
 
 
 @dlt.source(name="clinicaltrials")
@@ -86,76 +104,59 @@ def clinicaltrials_source(page_size: int = 100, query_term: Optional[str] = None
             # 2. Silver Transformations via Polars
             lf = pl.DataFrame(batch).lazy()
 
-            # Execute transformations
-            # Note: We collect immediately because we need to yield rows to dlt
-            try:
-                df_studies = transform_to_silver_studies(lf)
-                df_sponsors = transform_to_silver_sponsors(lf)
-                df_locations = transform_to_silver_locations(lf)
-                df_interventions = transform_to_silver_interventions(lf)
-                df_outcomes = transform_to_silver_outcomes(lf)
-                df_references = transform_to_silver_references(lf)
-                df_officials = transform_to_silver_officials(lf)
-            except Exception as e:
-                logger.error(f"Error in Polars transformation: {e}")
-                # Fallback or re-raise? Re-raise to ensure integrity.
-                raise e
+            # Store DataFrames for later use (Silver yielding + Gold transformation)
+            silver_dfs: dict[str, pl.DataFrame] = {}
 
-            # Map DataFrames to Table Names and Pydantic Models
-            silver_map: dict[str, tuple[pl.DataFrame, Type[BaseModel]]] = {
-                "silver_clinicaltrials_studies": (df_studies, SilverStudy),
-                "silver_clinicaltrials_sponsors": (df_sponsors, SilverSponsor),
-                "silver_clinicaltrials_locations": (df_locations, SilverLocation),
-                "silver_clinicaltrials_interventions": (df_interventions, SilverIntervention),
-                "silver_clinicaltrials_outcomes": (df_outcomes, SilverOutcome),
-                "silver_clinicaltrials_references": (df_references, SilverReference),
-                "silver_clinicaltrials_officials": (df_officials, SilverOfficial),
-            }
+            for resource in SILVER_RESOURCES:
+                try:
+                    df = resource.transformer(lf)
+                    silver_dfs[resource.name] = df
+                except Exception as e:
+                    logger.error(f"Error in Polars transformation for {resource.name}: {e}")
+                    raise e
 
-            # Prepare lookup for Gold transformation (need Silver Study + Locations per NCT ID)
-            # This requires joining or indexing.
-            # Doing it in memory via dictionaries is easiest for 'parity' with existing logic.
-
-            studies_dict = {row["source_id"]: row for row in df_studies.to_dicts()}
-
-            # Collect locations for Gold (grouped by source_id)
-            locations_lookup: dict[str, list[dict[str, Any]]] = {}
-            for loc in df_locations.to_dicts():
-                sid = loc["source_id"]
-                if sid not in locations_lookup:
-                    locations_lookup[sid] = []
-                locations_lookup[sid].append(loc)
-
-            # Yield Silver Records with Strict Validation
-            for table_name, (df, model_class) in silver_map.items():
-                pk = "source_id" if table_name == "silver_clinicaltrials_studies" else "id"
+            # Yield Silver Records
+            for resource in SILVER_RESOURCES:
+                df = silver_dfs[resource.name]
                 for record in df.to_dicts():
                     # Validate via Pydantic
-                    # This raises ValidationError if schema is violated
-                    validated_model = model_class.model_validate(record)
+                    validated_model = resource.model.model_validate(record)
                     validated_record = validated_model.model_dump()
 
                     yield dlt.mark.with_hints(
-                        dlt.mark.with_table_name(validated_record, table_name),
-                        dlt.mark.make_hints(write_disposition="merge", primary_key=pk),
+                        dlt.mark.with_table_name(validated_record, resource.name),
+                        dlt.mark.make_hints(write_disposition="merge", primary_key=resource.primary_key),
                     )
 
             # 3. Yield Gold Records
-            # Iterating through the batch again to match Gold logic
-            for raw_study in batch:
-                nct_id = raw_study.get("protocolSection", {}).get("identificationModule", {}).get("nctId")
-                if not nct_id or nct_id not in studies_dict:
-                    continue
+            # Prepare lookup for Gold transformation (need Silver Study + Locations per NCT ID)
+            df_studies = silver_dfs.get("silver_clinicaltrials_studies")
+            df_locations = silver_dfs.get("silver_clinicaltrials_locations")
 
-                silver_study = studies_dict[nct_id]
-                silver_locs = locations_lookup.get(nct_id, [])
+            if df_studies is not None and df_locations is not None:
+                studies_dict = {row["source_id"]: row for row in df_studies.to_dicts()}
 
-                gold_record = transform_gold(raw_study, silver_study, silver_locs)
-                if gold_record:
-                    yield dlt.mark.with_hints(
-                        dlt.mark.with_table_name(gold_record, "gold_clinicaltrials_studies"),
-                        dlt.mark.make_hints(write_disposition="merge", primary_key="source_id"),
-                    )
+                locations_lookup: dict[str, list[dict[str, Any]]] = {}
+                for loc in df_locations.to_dicts():
+                    sid = loc["source_id"]
+                    if sid not in locations_lookup:
+                        locations_lookup[sid] = []
+                    locations_lookup[sid].append(loc)
+
+                for raw_study in batch:
+                    nct_id = raw_study.get("protocolSection", {}).get("identificationModule", {}).get("nctId")
+                    if not nct_id or nct_id not in studies_dict:
+                        continue
+
+                    silver_study = studies_dict[nct_id]
+                    silver_locs = locations_lookup.get(nct_id, [])
+
+                    gold_record = transform_gold(raw_study, silver_study, silver_locs)
+                    if gold_record:
+                        yield dlt.mark.with_hints(
+                            dlt.mark.with_table_name(gold_record, "gold_clinicaltrials_studies"),
+                            dlt.mark.make_hints(write_disposition="merge", primary_key="source_id"),
+                        )
 
         for raw_study in client.list_studies(page_size=page_size, query_term=current_query_term):
             nct_id = raw_study.get("protocolSection", {}).get("identificationModule", {}).get("nctId")
