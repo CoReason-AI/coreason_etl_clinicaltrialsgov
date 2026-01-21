@@ -40,6 +40,7 @@ def mock_polars_transformers() -> Generator[dict[str, MagicMock], None, None]:
         "transform_to_silver_interventions",
         "transform_to_silver_outcomes",
         "transform_to_silver_references",
+        "transform_to_silver_officials",
     ]
     mocks = {}
     patchers = []
@@ -92,6 +93,7 @@ def test_studies_generator_flow(
     mock_polars_transformers["transform_to_silver_interventions"].return_value = mock_df([])
     mock_polars_transformers["transform_to_silver_outcomes"].return_value = mock_df([])
     mock_polars_transformers["transform_to_silver_references"].return_value = mock_df([])
+    mock_polars_transformers["transform_to_silver_officials"].return_value = mock_df([])
 
     mock_transform_gold.return_value = {"gold_field": "val"}
 

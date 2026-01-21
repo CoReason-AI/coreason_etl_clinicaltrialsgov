@@ -155,6 +155,13 @@ def _gen_ref_id_udf(row: dict[str, Any]) -> str:
     return _generate_surrogate_key_udf(row["nct_id"], row["pmid"], row["citation"])
 
 
+def _gen_official_id_udf(row: dict[str, Any]) -> str:
+    name = row.get("name")
+    if name is not None:
+        name = str(name).strip()
+    return _generate_surrogate_key_udf(row["nct_id"], name, row.get("role"), row.get("affiliation"))
+
+
 # --- Transformers ---
 
 
@@ -710,6 +717,145 @@ def transform_to_silver_references(lf: pl.LazyFrame) -> pl.DataFrame:
                 pl.col("pmid"),
                 pl.col("citation"),
                 pl.col("retraction"),
+            ]
+        )
+        .collect()
+    )
+
+
+def transform_to_silver_officials(lf: pl.LazyFrame) -> pl.DataFrame:
+    schema = lf.collect_schema()
+    base = lf.select(
+        [
+            _safe_get_field(schema, "protocolSection", ["identificationModule", "nctId"], "nct_id"),
+            _safe_get_field(
+                schema, "protocolSection", ["statusModule", "studyFirstPostDateStruct", "date"], "first_received_date"
+            ),
+            _safe_get_field(schema, "protocolSection", ["contactsLocationsModule"], "contacts_mod"),
+        ]
+    ).filter(pl.col("nct_id").is_not_null())
+
+    base = base.with_columns(
+        pl.struct(["nct_id", "first_received_date"])
+        .map_elements(
+            lambda x: _generate_coreason_id_udf(x["nct_id"], x["first_received_date"]), return_dtype=pl.String
+        )
+        .alias("coreason_id")
+    )
+
+    base_schema = base.collect_schema()
+    mod_dtype = base_schema.get("contacts_mod")
+
+    dfs = []
+
+    # 1. Overall Officials
+    has_officials = False
+    if isinstance(mod_dtype, pl.Struct):
+        if any(f.name == "overallOfficials" for f in mod_dtype.fields):
+            has_officials = True
+
+    if has_officials:
+        exploded = (
+            base.select(
+                [
+                    pl.col("nct_id"),
+                    pl.col("coreason_id"),
+                    pl.col("contacts_mod").struct.field("overallOfficials").alias("officials"),
+                ]
+            )
+            .filter(pl.col("officials").is_not_null())
+            .explode("officials")
+        )
+
+        ex_schema = exploded.collect_schema()
+        o_dtype = ex_schema.get("officials")
+
+        df_off = exploded.select(
+            [
+                pl.col("nct_id"),
+                pl.col("coreason_id"),
+                _safe_struct_field("officials", "name", o_dtype, "name"),
+                _safe_struct_field("officials", "role", o_dtype, "role"),
+                _safe_struct_field("officials", "affiliation", o_dtype, "affiliation"),
+                pl.lit(None, dtype=DEFAULT_STRING_TYPE).alias("phone"),
+                pl.lit(None, dtype=DEFAULT_STRING_TYPE).alias("email"),
+            ]
+        ).collect()
+
+        if df_off.height > 0:
+            dfs.append(df_off)
+
+    # 2. Central Contacts
+    has_contacts = False
+    if isinstance(mod_dtype, pl.Struct):
+        if any(f.name == "centralContacts" for f in mod_dtype.fields):
+            has_contacts = True
+
+    if has_contacts:
+        exploded = (
+            base.select(
+                [
+                    pl.col("nct_id"),
+                    pl.col("coreason_id"),
+                    pl.col("contacts_mod").struct.field("centralContacts").alias("contacts"),
+                ]
+            )
+            .filter(pl.col("contacts").is_not_null())
+            .explode("contacts")
+        )
+
+        ex_schema = exploded.collect_schema()
+        c_dtype = ex_schema.get("contacts")
+
+        df_con = exploded.select(
+            [
+                pl.col("nct_id"),
+                pl.col("coreason_id"),
+                _safe_struct_field("contacts", "name", c_dtype, "name"),
+                _safe_struct_field("contacts", "role", c_dtype, "role"),
+                pl.lit(None, dtype=DEFAULT_STRING_TYPE).alias("affiliation"),
+                _safe_struct_field("contacts", "phone", c_dtype, "phone"),
+                _safe_struct_field("contacts", "email", c_dtype, "email"),
+            ]
+        ).collect()
+
+        if df_con.height > 0:
+            dfs.append(df_con)
+
+    if not dfs:
+        return pl.DataFrame(
+            schema={
+                "id": pl.String,
+                "source_id": pl.String,
+                "coreason_id": pl.String,
+                "name": pl.String,
+                "role": pl.String,
+                "affiliation": pl.String,
+                "phone": pl.String,
+                "email": pl.String,
+            }
+        )
+
+    combined = pl.concat(dfs)
+
+    return (
+        combined.lazy()
+        .with_columns(
+            pl.struct(["nct_id", "name", "role", "affiliation"])
+            .map_elements(_gen_official_id_udf, return_dtype=pl.String)
+            .alias("id")
+        )
+        .unique(subset=["id"], keep="first")
+        .select(
+            [
+                pl.col("id"),
+                pl.col("nct_id").alias("source_id"),
+                pl.col("coreason_id"),
+                pl.col("name"),
+                pl.col("role"),
+                pl.col("affiliation"),
+                pl.col("phone"),
+                pl.col("email"),
             ]
         )
         .collect()

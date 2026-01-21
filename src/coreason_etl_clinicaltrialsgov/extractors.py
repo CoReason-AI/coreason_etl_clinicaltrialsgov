@@ -22,6 +22,7 @@ from coreason_etl_clinicaltrialsgov.client import ClinicalTrialsClient
 from coreason_etl_clinicaltrialsgov.schemas import (
     SilverIntervention,
     SilverLocation,
+    SilverOfficial,
     SilverOutcome,
     SilverReference,
     SilverSponsor,
@@ -31,6 +32,7 @@ from coreason_etl_clinicaltrialsgov.transformers import transform_gold
 from coreason_etl_clinicaltrialsgov.transformers_polars import (
     transform_to_silver_interventions,
     transform_to_silver_locations,
+    transform_to_silver_officials,
     transform_to_silver_outcomes,
     transform_to_silver_references,
     transform_to_silver_sponsors,
@@ -93,6 +95,7 @@ def clinicaltrials_source(page_size: int = 100, query_term: Optional[str] = None
                 df_interventions = transform_to_silver_interventions(lf)
                 df_outcomes = transform_to_silver_outcomes(lf)
                 df_references = transform_to_silver_references(lf)
+                df_officials = transform_to_silver_officials(lf)
             except Exception as e:
                 logger.error(f"Error in Polars transformation: {e}")
                 # Fallback or re-raise? Re-raise to ensure integrity.
@@ -106,6 +109,7 @@ def clinicaltrials_source(page_size: int = 100, query_term: Optional[str] = None
                 "silver.clinicaltrials_interventions": (df_interventions, SilverIntervention),
                 "silver.clinicaltrials_outcomes": (df_outcomes, SilverOutcome),
                 "silver.clinicaltrials_references": (df_references, SilverReference),
+                "silver.clinicaltrials_officials": (df_officials, SilverOfficial),
             }
 
             # Prepare lookup for Gold transformation (need Silver Study + Locations per NCT ID)
