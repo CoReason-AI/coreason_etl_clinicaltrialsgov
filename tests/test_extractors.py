@@ -109,22 +109,36 @@ def test_studies_generator_flow(
             item = item.data
         return item
 
-    unwrapped_items = [extract_data(i) for i in items]
-
     # Check Bronze
-    bronze = next(i for i in unwrapped_items if isinstance(i, dict) and i.get("raw_payload") == raw_study)
+    bronze_item = next(
+        i for i in items if isinstance(extract_data(i), dict) and extract_data(i).get("raw_payload") == raw_study
+    )
+    bronze = extract_data(bronze_item)
     assert bronze["source_id"] == "NCT001"
+    # Verify table name
+    if hasattr(bronze_item, "meta"):
+        assert bronze_item.meta.table_name == "bronze_clinicaltrials_studies"
 
     # Check Silver
-    silver_study = next(i for i in unwrapped_items if isinstance(i, dict) and i.get("overall_status") == "RECRUITING")
+    silver_item = next(
+        i for i in items if isinstance(extract_data(i), dict) and extract_data(i).get("overall_status") == "RECRUITING"
+    )
+    silver_study = extract_data(silver_item)
     assert silver_study["source_id"] == "NCT001"
+    if hasattr(silver_item, "meta"):
+        assert silver_item.meta.table_name == "silver_clinicaltrials_studies"
 
-    silver_loc = next(i for i in unwrapped_items if isinstance(i, dict) and i.get("city") == "Boston")
-    assert silver_loc is not None
+    silver_loc = next(i for i in items if isinstance(extract_data(i), dict) and extract_data(i).get("city") == "Boston")
+    assert extract_data(silver_loc) is not None
 
     # Check Gold
-    gold = next(i for i in unwrapped_items if isinstance(i, dict) and i.get("gold_field") == "val")
+    gold_item = next(
+        i for i in items if isinstance(extract_data(i), dict) and extract_data(i).get("gold_field") == "val"
+    )
+    gold = extract_data(gold_item)
     assert gold is not None
+    if hasattr(gold_item, "meta"):
+        assert gold_item.meta.table_name == "gold_clinicaltrials_studies"
 
 
 def test_studies_generator_skip_no_nct(mock_client_class: MagicMock) -> None:

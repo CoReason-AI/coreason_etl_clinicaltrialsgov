@@ -32,7 +32,7 @@ def run(
     query_term: Annotated[Optional[str], typer.Option(help="Optional query term for filtering")] = None,
     destination: Annotated[str, typer.Option(help="DLT destination")] = "postgres",
     pipeline_name: Annotated[str, typer.Option(help="DLT pipeline name")] = "clinicaltrials_etl",
-    dataset_name: Annotated[str, typer.Option(help="DLT dataset name")] = "clinical_trials_data",
+    dataset_name: Annotated[Optional[str], typer.Option(help="DLT dataset name")] = None,
 ) -> None:
     """Run the ClinicalTrials.gov ETL pipeline."""
     if page_size <= 0:
@@ -41,12 +41,15 @@ def run(
 
     try:
         # Configure pipeline
-        pipeline = dlt.pipeline(
-            pipeline_name=pipeline_name,
-            destination=destination,
-            dataset_name=dataset_name,
-            progress="log",
-        )
+        pipeline_kwargs = {
+            "pipeline_name": pipeline_name,
+            "destination": destination,
+            "progress": "log",
+        }
+        if dataset_name:
+            pipeline_kwargs["dataset_name"] = dataset_name
+
+        pipeline = dlt.pipeline(**pipeline_kwargs)
 
         logger.info(
             f"Starting extraction with page_size={page_size}, query_term={query_term}, destination={destination}"

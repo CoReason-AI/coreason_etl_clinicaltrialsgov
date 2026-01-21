@@ -32,7 +32,7 @@ def test_run_command_defaults(mock_source: MagicMock, mock_pipeline: MagicMock) 
     mock_pipeline.assert_called_once_with(
         pipeline_name="clinicaltrials_etl",
         destination="postgres",
-        dataset_name="clinical_trials_data",
+        dataset_name=None,
         progress="log",
     )
     mock_source.assert_called_once_with(page_size=100, query_term=None)
