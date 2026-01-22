@@ -37,15 +37,8 @@ def transform_gold(
     brief_summary = protocol.get("descriptionModule", {}).get("briefSummary")
     eligibility_criteria = protocol.get("eligibilityModule", {}).get("eligibilityCriteria")
     
-    # Extract Geo Countries
-    geo_countries_list = list({loc.get("country") for loc in locations if loc.get("country")})
-    geo_countries_list.sort()
-    
-    # CHANGED: Join list into a pipe-delimited string
-    if geo_countries_list:
-        geo_countries = "|".join(geo_countries_list)
-    else:
-        geo_countries = None
+    geo_countries = list({loc.get("country") for loc in locations if loc.get("country")})
+    geo_countries.sort()
 
     resp_party = protocol.get("sponsorCollaboratorsModule", {}).get("responsibleParty", {})
     responsible_party_type = resp_party.get("type")
@@ -66,7 +59,7 @@ def transform_gold(
         "maximum_age": silver_study.get("max_age"),
         "healthy_volunteers": silver_study.get("accepted_healthy_volunteers"),
         "study_population": silver_study.get("study_population"),
-        "healthy_volunteer": silver_study.get("accepted_healthy_volunteers"),
+        "healthy_volunteer": silver_study.get("accepted_healthy_volunteers"), # Duplicate as requested
     }
 
     # JSON 2: Sponsors Details

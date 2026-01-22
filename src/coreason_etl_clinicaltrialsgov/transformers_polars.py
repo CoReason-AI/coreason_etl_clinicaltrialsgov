@@ -161,10 +161,16 @@ def transform_to_silver_studies(lf: pl.LazyFrame) -> pl.DataFrame:
             get(["designModule", "studyType"], "study_type"),
             get(["designModule", "enrollmentInfo", "count"], "enrollment_count", pl.Int64()),
             get(["designModule", "enrollmentInfo", "type"], "enrollment_type"),
+            # New design fields
+            get(["designModule", "designInfo", "allocation"], "allocation"),
+            get(["designModule", "designInfo", "interventionModel"], "intervention_model"),
+            get(["designModule", "designInfo", "primaryPurpose"], "primary_purpose"),
+            # Eligibility fields
             get(["eligibilityModule", "minimumAge"], "min_age_raw"),
             get(["eligibilityModule", "maximumAge"], "max_age_raw"),
             get(["eligibilityModule", "sex"], "sex"),
             get(["eligibilityModule", "healthyVolunteers"], "accepted_healthy_volunteers", pl.Boolean()),
+            get(["eligibilityModule", "studyPopulation"], "study_population"),
         ]
     )
 
@@ -208,6 +214,10 @@ def transform_to_silver_studies(lf: pl.LazyFrame) -> pl.DataFrame:
                 pl.col("max_age"),
                 pl.col("sex"),
                 pl.col("accepted_healthy_volunteers"),
+                pl.col("allocation"),
+                pl.col("intervention_model"),
+                pl.col("primary_purpose"),
+                pl.col("study_population"),
             ]
         )
         .collect()
@@ -637,7 +647,6 @@ def transform_to_silver_references(lf: pl.LazyFrame) -> pl.DataFrame:
             _safe_get_field(
                 lf, "protocolSection", ["statusModule", "studyFirstPostDateStruct", "date"], "first_received_date"
             ),
-            # Fixed: pass dtype as List so missing fields return empty list-like null, not string null
             _safe_get_field(
                 lf,
                 "protocolSection",

@@ -1,3 +1,5 @@
+# File: coreason_etl_clinicaltrialsgov1/src/coreason_etl_clinicaltrialsgov/main.py
+
 # Copyright (c) 2025 CoReason, Inc.
 #
 # This software is proprietary and dual-licensed.
@@ -32,35 +34,55 @@ def run(
     query_term: Annotated[Optional[str], typer.Option(help="Optional query term for filtering")] = None,
     destination: Annotated[str, typer.Option(help="DLT destination")] = "postgres",
     pipeline_name: Annotated[str, typer.Option(help="DLT pipeline name")] = "clinicaltrials_etl",
-    dataset_name: Annotated[str, typer.Option(help="DLT dataset name")] = "clinical_trials_data",
+    # Note: dataset_name argument is removed/ignored here because we enforce schema separation below
 ) -> None:
-    """Run the ClinicalTrials.gov ETL pipeline."""
+    """
+    Run the ClinicalTrials.gov ETL pipeline.
+    
+    This command now enforces data separation into three distinct schemas:
+    'bronze', 'silver', and 'gold'.
+    """
     if page_size <= 0:
         logger.error(f"Invalid page_size: {page_size}. Must be positive.")
         raise typer.BadParameter("page_size must be positive")
 
-    try:
-        # Configure pipeline
-        pipeline = dlt.pipeline(
-            pipeline_name=pipeline_name,
-            destination=destination,
-            dataset_name=dataset_name,
-            progress="log",
-        )
+    schemas = ["bronze", "silver", "gold"]
+    
+    logger.info(f"Starting Multi-Schema ETL load to: {schemas}")
 
-        logger.info(
-            f"Starting extraction with page_size={page_size}, query_term={query_term}, destination={destination}"
-        )
+    for schema in schemas:
+        try:
+            logger.info(f"--- Processing Schema: {schema} ---")
+            
+            # Configure pipeline specifically for this schema
+            # This ensures dataset_name is exactly 'bronze', 'silver', or 'gold'
+            pipeline = dlt.pipeline(
+                pipeline_name=f"{pipeline_name}_{schema}",
+                destination=destination,
+                dataset_name=schema, 
+                progress="log",
+            )
 
-        source = clinicaltrials_source(page_size=page_size, query_term=query_term)
+            logger.info(
+                f"Extracting for layer='{schema}' with page_size={page_size}, query_term={query_term}"
+            )
 
-        info = pipeline.run(source)
+            # Pass the target schema to the source to filter data
+            source = clinicaltrials_source(
+                page_size=page_size, 
+                query_term=query_term, 
+                target_schema=schema
+            )
 
-        logger.info(f"Pipeline finished. Load info: {info}")
+            info = pipeline.run(source)
 
-    except Exception as e:
-        logger.exception(f"Pipeline failed: {e}")
-        raise typer.Exit(code=1) from e
+            logger.info(f"Pipeline finished for schema '{schema}'. Load info: {info}")
+
+        except Exception as e:
+            logger.exception(f"Pipeline failed for schema '{schema}': {e}")
+            raise typer.Exit(code=1) from e
+            
+    logger.info("All schemas processed successfully.")
 
 
 if __name__ == "__main__":  # pragma: no cover
