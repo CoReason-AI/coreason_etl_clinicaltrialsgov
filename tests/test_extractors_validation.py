@@ -16,7 +16,7 @@ import pytest
 from dlt.extract.exceptions import ResourceExtractionError
 from pydantic import ValidationError
 
-from coreason_etl_clinicaltrialsgov.extractors import clinicaltrials_source
+from coreason_etl_clinicaltrialsgov.extractors import SILVER_RESOURCES, SilverResource, clinicaltrials_source
 
 
 @pytest.fixture
@@ -83,17 +83,21 @@ def test_extractor_validation_failure_missing_required_field(mock_client: MagicM
         ]
     )
 
-    mocker.patch(
-        "coreason_etl_clinicaltrialsgov.extractors.transform_to_silver_studies",
-        return_value=invalid_df,
-    )
+    # Replace SILVER_RESOURCES with mocks
+    new_resources = []
+    mocks = {}
+    for res in SILVER_RESOURCES:
+        m = MagicMock()
+        mocks[res.transformer.__name__] = m
+        new_resources.append(SilverResource(res.name, m, res.model, res.primary_key))
 
-    empty_df = pl.DataFrame([])
-    mocker.patch("coreason_etl_clinicaltrialsgov.extractors.transform_to_silver_sponsors", return_value=empty_df)
-    mocker.patch("coreason_etl_clinicaltrialsgov.extractors.transform_to_silver_locations", return_value=empty_df)
-    mocker.patch("coreason_etl_clinicaltrialsgov.extractors.transform_to_silver_interventions", return_value=empty_df)
-    mocker.patch("coreason_etl_clinicaltrialsgov.extractors.transform_to_silver_outcomes", return_value=empty_df)
-    mocker.patch("coreason_etl_clinicaltrialsgov.extractors.transform_to_silver_references", return_value=empty_df)
+    mocker.patch("coreason_etl_clinicaltrialsgov.extractors.SILVER_RESOURCES", new_resources)
+
+    # Configure mocks
+    mocks["transform_to_silver_studies"].return_value = invalid_df
+    for k, m in mocks.items():
+        if k != "transform_to_silver_studies":
+            m.return_value = pl.DataFrame([])
 
     source = clinicaltrials_source()
 
@@ -119,17 +123,21 @@ def test_extractor_validation_failure_wrong_type(mock_client: MagicMock, mocker:
         ]
     )
 
-    mocker.patch(
-        "coreason_etl_clinicaltrialsgov.extractors.transform_to_silver_studies",
-        return_value=invalid_df,
-    )
+    # Replace SILVER_RESOURCES with mocks
+    new_resources = []
+    mocks = {}
+    for res in SILVER_RESOURCES:
+        m = MagicMock()
+        mocks[res.transformer.__name__] = m
+        new_resources.append(SilverResource(res.name, m, res.model, res.primary_key))
 
-    empty_df = pl.DataFrame([])
-    mocker.patch("coreason_etl_clinicaltrialsgov.extractors.transform_to_silver_sponsors", return_value=empty_df)
-    mocker.patch("coreason_etl_clinicaltrialsgov.extractors.transform_to_silver_locations", return_value=empty_df)
-    mocker.patch("coreason_etl_clinicaltrialsgov.extractors.transform_to_silver_interventions", return_value=empty_df)
-    mocker.patch("coreason_etl_clinicaltrialsgov.extractors.transform_to_silver_outcomes", return_value=empty_df)
-    mocker.patch("coreason_etl_clinicaltrialsgov.extractors.transform_to_silver_references", return_value=empty_df)
+    mocker.patch("coreason_etl_clinicaltrialsgov.extractors.SILVER_RESOURCES", new_resources)
+
+    # Configure mocks
+    mocks["transform_to_silver_studies"].return_value = invalid_df
+    for k, m in mocks.items():
+        if k != "transform_to_silver_studies":
+            m.return_value = pl.DataFrame([])
 
     source = clinicaltrials_source()
 

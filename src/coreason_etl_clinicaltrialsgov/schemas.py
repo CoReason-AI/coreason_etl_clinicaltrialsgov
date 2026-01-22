@@ -99,6 +99,19 @@ class SilverReference(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
+class SilverOfficial(BaseModel):
+    id: str
+    source_id: str
+    coreason_id: str
+    name: Optional[str] = None
+    role: Optional[str] = None
+    affiliation: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
 class GoldStudy(BaseModel):
     source_id: str
     coreason_id: str

@@ -90,8 +90,15 @@ def test_silver_sponsors_complex_edge_cases() -> None:
     assert lower_entry["id"] != collab_same_name["id"]
 
     # 5. Whitespace ("Global Corp " vs "Global Corp")
-    ws_entry = next(r for r in results if r["name"] == "Global Corp ")
-    assert ws_entry["id"] != collab_same_name["id"]
+    # UPDATED BEHAVIOR: We now strip whitespace in ID generation.
+    # So "Global Corp " becomes "Global Corp" in ID generation.
+    # It collides with "Global Corp" (collab_same_name).
+    # Since "Global Corp" (collab_same_name) appeared earlier in the list (Case 1),
+    # "Global Corp " (Case 4) is dropped as a duplicate.
+
+    # Assert that "Global Corp " is NOT present in the results
+    ws_entries = [r for r in results if r["name"] == "Global Corp "]
+    assert len(ws_entries) == 0
 
     # 6. Pipe Handling
     # "Collision|Candidate" vs "Collision_Candidate"

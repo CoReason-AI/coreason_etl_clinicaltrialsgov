@@ -15,7 +15,7 @@ import pytest
 from dlt.extract.exceptions import ResourceExtractionError
 from dlt.extract.items import DataItemWithMeta
 
-from coreason_etl_clinicaltrialsgov.extractors import clinicaltrials_source
+from coreason_etl_clinicaltrialsgov.extractors import SilverResource, clinicaltrials_source
 
 
 @pytest.fixture
@@ -30,30 +30,25 @@ def mock_transform_gold() -> Generator[MagicMock, None, None]:
         yield mock
 
 
-# Mock Polars transformers
+# Mock Silver Resources
 @pytest.fixture
-def mock_polars_transformers() -> Generator[dict[str, MagicMock], None, None]:
-    modules = [
-        "transform_to_silver_studies",
-        "transform_to_silver_sponsors",
-        "transform_to_silver_locations",
-        "transform_to_silver_interventions",
-        "transform_to_silver_outcomes",
-        "transform_to_silver_references",
-    ]
+def mock_silver_resources() -> Generator[dict[str, MagicMock], None, None]:
+    # Original list from extractors module
+    from coreason_etl_clinicaltrialsgov.extractors import SILVER_RESOURCES
+
     mocks = {}
-    patchers = []
+    new_resources = []
 
-    for mod in modules:
-        p = patch(f"coreason_etl_clinicaltrialsgov.extractors.{mod}")
-        m = p.start()
-        mocks[mod] = m
-        patchers.append(p)
+    for res in SILVER_RESOURCES:
+        m = MagicMock()
+        # Use transformer function name as key for test compatibility
+        key = res.transformer.__name__
+        mocks[key] = m
 
-    yield mocks
+        new_resources.append(SilverResource(res.name, m, res.model, res.primary_key))
 
-    for p in patchers:
-        p.stop()
+    with patch("coreason_etl_clinicaltrialsgov.extractors.SILVER_RESOURCES", new_resources):
+        yield mocks
 
 
 def test_clinicaltrials_source_structure() -> None:
@@ -63,7 +58,7 @@ def test_clinicaltrials_source_structure() -> None:
 
 
 def test_studies_generator_flow(
-    mock_client_class: MagicMock, mock_polars_transformers: dict[str, MagicMock], mock_transform_gold: MagicMock
+    mock_client_class: MagicMock, mock_silver_resources: dict[str, MagicMock], mock_transform_gold: MagicMock
 ) -> None:
     # Setup mocks
     client_instance = mock_client_class.return_value
@@ -80,18 +75,19 @@ def test_studies_generator_flow(
 
     # Setup transformer returns
     # Must match Pydantic schemas (SilverStudy requires coreason_id)
-    mock_polars_transformers["transform_to_silver_studies"].return_value = mock_df(
+    mock_silver_resources["transform_to_silver_studies"].return_value = mock_df(
         [{"source_id": "NCT001", "coreason_id": "CID1", "overall_status": "RECRUITING"}]
     )
     # SilverSponsor requires id, source_id, coreason_id, role
-    mock_polars_transformers["transform_to_silver_sponsors"].return_value = mock_df([])
+    mock_silver_resources["transform_to_silver_sponsors"].return_value = mock_df([])
     # SilverLocation requires id, source_id, coreason_id
-    mock_polars_transformers["transform_to_silver_locations"].return_value = mock_df(
+    mock_silver_resources["transform_to_silver_locations"].return_value = mock_df(
         [{"id": "L1", "source_id": "NCT001", "coreason_id": "CID1", "city": "Boston"}]
     )
-    mock_polars_transformers["transform_to_silver_interventions"].return_value = mock_df([])
-    mock_polars_transformers["transform_to_silver_outcomes"].return_value = mock_df([])
-    mock_polars_transformers["transform_to_silver_references"].return_value = mock_df([])
+    mock_silver_resources["transform_to_silver_interventions"].return_value = mock_df([])
+    mock_silver_resources["transform_to_silver_outcomes"].return_value = mock_df([])
+    mock_silver_resources["transform_to_silver_references"].return_value = mock_df([])
+    mock_silver_resources["transform_to_silver_officials"].return_value = mock_df([])
 
     mock_transform_gold.return_value = {"gold_field": "val"}
 
@@ -107,22 +103,36 @@ def test_studies_generator_flow(
             item = item.data
         return item
 
-    unwrapped_items = [extract_data(i) for i in items]
-
     # Check Bronze
-    bronze = next(i for i in unwrapped_items if isinstance(i, dict) and i.get("raw_payload") == raw_study)
+    bronze_item = next(
+        i for i in items if isinstance(extract_data(i), dict) and extract_data(i).get("raw_payload") == raw_study
+    )
+    bronze = extract_data(bronze_item)
     assert bronze["source_id"] == "NCT001"
+    # Verify table name
+    if hasattr(bronze_item, "meta"):
+        assert bronze_item.meta.table_name == "bronze_clinicaltrials_studies"
 
     # Check Silver
-    silver_study = next(i for i in unwrapped_items if isinstance(i, dict) and i.get("overall_status") == "RECRUITING")
+    silver_item = next(
+        i for i in items if isinstance(extract_data(i), dict) and extract_data(i).get("overall_status") == "RECRUITING"
+    )
+    silver_study = extract_data(silver_item)
     assert silver_study["source_id"] == "NCT001"
+    if hasattr(silver_item, "meta"):
+        assert silver_item.meta.table_name == "silver_clinicaltrials_studies"
 
-    silver_loc = next(i for i in unwrapped_items if isinstance(i, dict) and i.get("city") == "Boston")
-    assert silver_loc is not None
+    silver_loc = next(i for i in items if isinstance(extract_data(i), dict) and extract_data(i).get("city") == "Boston")
+    assert extract_data(silver_loc) is not None
 
     # Check Gold
-    gold = next(i for i in unwrapped_items if isinstance(i, dict) and i.get("gold_field") == "val")
+    gold_item = next(
+        i for i in items if isinstance(extract_data(i), dict) and extract_data(i).get("gold_field") == "val"
+    )
+    gold = extract_data(gold_item)
     assert gold is not None
+    if hasattr(gold_item, "meta"):
+        assert gold_item.meta.table_name == "gold_clinicaltrials_studies"
 
 
 def test_studies_generator_skip_no_nct(mock_client_class: MagicMock) -> None:
@@ -138,7 +148,7 @@ def test_studies_generator_skip_no_nct(mock_client_class: MagicMock) -> None:
 
 
 def test_studies_generator_gold_skip(
-    mock_client_class: MagicMock, mock_polars_transformers: dict[str, MagicMock], mock_transform_gold: MagicMock
+    mock_client_class: MagicMock, mock_silver_resources: dict[str, MagicMock], mock_transform_gold: MagicMock
 ) -> None:
     client_instance = mock_client_class.return_value
     raw_study = {"protocolSection": {"identificationModule": {"nctId": "NCT001"}}}
@@ -150,11 +160,11 @@ def test_studies_generator_gold_skip(
         return m
 
     # Mock valid study
-    mock_polars_transformers["transform_to_silver_studies"].return_value = mock_df(
+    mock_silver_resources["transform_to_silver_studies"].return_value = mock_df(
         [{"source_id": "NCT001", "coreason_id": "CID1"}]
     )
     # Other transformers return empty
-    for k, m in mock_polars_transformers.items():
+    for k, m in mock_silver_resources.items():
         if k != "transform_to_silver_studies":
             m.return_value = mock_df([])
 
@@ -180,7 +190,7 @@ def test_studies_generator_gold_skip(
 
 
 def test_studies_generator_batching_and_exception(
-    mock_client_class: MagicMock, mock_polars_transformers: dict[str, MagicMock]
+    mock_client_class: MagicMock, mock_silver_resources: dict[str, MagicMock]
 ) -> None:
     # Test batching logic: page_size=2, total=3 items. Should yield batch of 2 then batch of 1.
     client_instance = mock_client_class.return_value
@@ -197,7 +207,7 @@ def test_studies_generator_batching_and_exception(
         return m
 
     # Return empty valid data for Silver tables to pass validation loop
-    for _, m in mock_polars_transformers.items():
+    for _, m in mock_silver_resources.items():
         m.return_value = mock_df([])
 
     # Use page_size=2
@@ -218,14 +228,14 @@ def test_studies_generator_batching_and_exception(
 
 
 def test_studies_generator_exception_handling(
-    mock_client_class: MagicMock, mock_polars_transformers: dict[str, MagicMock]
+    mock_client_class: MagicMock, mock_silver_resources: dict[str, MagicMock]
 ) -> None:
     client_instance = mock_client_class.return_value
     studies = [{"protocolSection": {"identificationModule": {"nctId": "NCT1"}}}]
     client_instance.list_studies.return_value = iter(studies)
 
     # Force exception
-    mock_polars_transformers["transform_to_silver_studies"].side_effect = ValueError("Polars Error")
+    mock_silver_resources["transform_to_silver_studies"].side_effect = ValueError("Polars Error")
 
     source = clinicaltrials_source()
     resource = source.resources["studies_stream"]
@@ -236,7 +246,7 @@ def test_studies_generator_exception_handling(
 
 
 def test_studies_generator_with_query_term(
-    mock_client_class: MagicMock, mock_polars_transformers: dict[str, MagicMock]
+    mock_client_class: MagicMock, mock_silver_resources: dict[str, MagicMock]
 ) -> None:
     client_instance = mock_client_class.return_value
     client_instance.list_studies.return_value = iter([])
@@ -247,7 +257,7 @@ def test_studies_generator_with_query_term(
 
 
 def test_studies_generator_high_water_mark(
-    mock_client_class: MagicMock, mock_polars_transformers: dict[str, MagicMock]
+    mock_client_class: MagicMock, mock_silver_resources: dict[str, MagicMock]
 ) -> None:
     # Test high water mark update coverage
     client_instance = mock_client_class.return_value
@@ -265,10 +275,10 @@ def test_studies_generator_high_water_mark(
         m.to_dicts.return_value = data
         return m
 
-    mock_polars_transformers["transform_to_silver_studies"].return_value = mock_df(
+    mock_silver_resources["transform_to_silver_studies"].return_value = mock_df(
         [{"source_id": "NCT_HWM", "coreason_id": "CID"}]
     )
-    for k, m in mock_polars_transformers.items():
+    for k, m in mock_silver_resources.items():
         if k != "transform_to_silver_studies":
             m.return_value = mock_df([])
 
@@ -280,7 +290,7 @@ def test_studies_generator_high_water_mark(
 
 
 def test_studies_generator_incremental_auto_filter(
-    mock_client_class: MagicMock, mock_polars_transformers: dict[str, MagicMock]
+    mock_client_class: MagicMock, mock_silver_resources: dict[str, MagicMock]
 ) -> None:
     """Test that query term is automatically generated if state exists."""
     client_instance = mock_client_class.return_value
