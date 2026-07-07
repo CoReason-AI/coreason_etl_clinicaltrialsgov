@@ -1,15 +1,7 @@
-# Copyright (c) 2025 CoReason, Inc.
-#
-# This software is proprietary and dual-licensed.
-# Licensed under the Prosperity Public License 3.0 (the "License").
-# A copy of the license is available at https://prosperitylicense.com/versions/3.0.0
-# For details, see the LICENSE file.
-# Commercial use beyond a 30-day trial requires a separate license.
-#
-# Source Code: https://github.com/CoReason-AI/coreason_etl_clinicaltrialsgov
+# File: coreason_etl_clinicaltrialsgov/src/coreason_etl_clinicaltrialsgov/schemas.py
 
 from datetime import date
-from typing import Any, Optional
+from typing import Any, Optional, List
 
 from pydantic import BaseModel, ConfigDict
 
@@ -37,6 +29,10 @@ class SilverStudy(BaseModel):
     max_age: Optional[float] = None
     sex: Optional[str] = None
     accepted_healthy_volunteers: Optional[bool] = None
+    allocation: Optional[str] = None
+    intervention_model: Optional[str] = None
+    primary_purpose: Optional[str] = None
+    study_population: Optional[str] = None
 
     model_config = ConfigDict(extra="ignore")
 
@@ -120,10 +116,17 @@ class GoldStudy(BaseModel):
     source_id: str
     coreason_id: str
     title: Optional[str] = None
-    overall_status: str
-    enrollment_bucket: Optional[str] = None
+    
+    # REQUIRED: These fields must be here to be saved
     years_active: Optional[float] = None
-    has_results: bool
-    geo_countries: list[str]
+    eligibility_criteria: Optional[str] = None
+    brief_summary: Optional[str] = None
+    
+    # CHANGED: List[str] -> str to force a single DB column
+    geo_countries: Optional[str] = None
+    
+    # JSON columns
+    structural_attributes: dict[str, Any]
+    sponsors_details: dict[str, Any]
 
     model_config = ConfigDict(extra="ignore")
